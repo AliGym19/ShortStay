@@ -164,9 +164,53 @@ The exact scope string ShortStay requests (lib/oauth.ts):
 ```
 openid profile email offline_access
 accounting.settings.read accounting.contacts.read
-accounting.invoices.read accounting.banktransactions.read
+accounting.invoices accounting.banktransactions.read
 accounting.reports.profitandloss.read
 ```
 
-No write scopes are requested. Reports scopes are granular per-report —
+One write scope (`accounting.invoices`) — requesting it alone causes Xero to
+auto-grant `accounting.invoices.read` on the same token. No payment scope of
+any kind is requested. Reports scopes are granular per-report —
 `accounting.reports.read` is not a valid scope for this app.
+
+## SQLite Schema (lib/schema.ts)
+
+Drizzle tables, `data/shortstay.db` (gitignored). Text primary keys via
+`crypto.randomUUID()`; timestamps as integer epoch-ms; JSON fields stored as
+text.
+
+```typescript
+auditEvents: { id, eventType, actor, subjectType, subjectId, payload (json),
+               parentEventId, createdAt }
+prompts:     { id, name, body, modelTarget, status, version, createdAt }
+approvals:   { id, kind, subjectId, summary, detail (json), stagedBy, status
+               (pending|approved|denied, default pending), decidedBy,
+               auditEventId, createdAt, decidedAt }
+```
+
+`lib/audit.ts` implements `AuditLog` (append/query/chain — types in
+`lib/audit-types.ts`, copied from the `@physical-substrate/audit-log` spec).
+`lib/prompt-registry.ts` implements `PromptRegistry` (types in
+`lib/prompt-registry-types.ts`) — every mutation appends a `prompt.*` audit
+event. Both are ports of paragon-hil's Postgres implementations onto
+better-sqlite3; method behavior is unchanged.
+
+## LLM Router (lib/llm.ts, lib/llm-types.ts)
+
+`Router` interface copied from the `@physical-substrate/llm-router` spec.
+Backed by OpenRouter (`POST openrouter.ai/api/v1/chat/completions`), one
+retry on 429/5xx/network (500ms backoff). Tier map:
+
+```typescript
+"tier:everyday": "anthropic/claude-haiku-4.5"
+"tier:judgment": "anthropic/claude-opus-4.8"
+```
+
+`verifyTierModels()` checks both ids against OpenRouter's live `/models`
+catalogue before use — a miss surfaces the real `anthropic/*` list rather
+than silently substituting. Every `complete()` call appends an
+`llm.completed` audit event (`modelTarget`, `resolvedModel`, `usage`).
+Seeded prompts: `issue-classifier` (tier:everyday), `action-stager`
+(tier:judgment) — bodies in `app/api/dev/llm-smoke/route.ts`'s git history
+(the seeding route was removed after running; re-seed by calling
+`promptRegistry.create` directly if the table is ever reset).

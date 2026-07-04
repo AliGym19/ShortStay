@@ -10,17 +10,20 @@ Operational guidelines for AI agents working in the **ShortStay** repository.
 
 ## Core Philosophy
 
-- **Read-only guarantee is paramount.** ShortStay holds no Xero write scopes and
-  the single egress point (`lib/xero.ts`) hard-throws on any non-GET request.
-  Never bypass, weaken, or route around this guard. The OAuth endpoints target
-  `identity.xero.com` — a different host — and are intentionally outside the
-  guard's scope.
+- **Never-moves-money is paramount.** ShortStay holds exactly one Xero write
+  scope (`accounting.invoices`) and the single egress point (`lib/xero.ts`)
+  hard-throws on any request except GET or a `POST /Invoices` whose parsed
+  body has `Type: "ACCPAY"` and `Status: "DRAFT"`. Never bypass, weaken, or
+  route around this guard — not even "for testing". The OAuth endpoints
+  target `identity.xero.com` — a different host — and are intentionally
+  outside the guard's scope.
 - **Simplicity over cleverness.** No Xero SDK, no heavy state management, no
   unnecessary abstractions. The codebase is deliberately small — keep it that
   way.
 - **No unnecessary dependencies.** Justify every addition. The current surface
-  is Next.js + Tailwind + Supabase (client only). Do not pull in a library
-  without a clear, proportionate reason.
+  is Next.js + Tailwind + Drizzle/better-sqlite3 + Supabase (client only,
+  unused) + OpenRouter. Do not pull in a library without a clear,
+  proportionate reason.
 - **Documentation stays current.** If you change architecture, data flow, file
   structure, or the data model, update the matching `docs/` file immediately.
   `docs/` is canonical — `.brain/` is session scratch.
@@ -53,8 +56,8 @@ Follow this sequence; do not skip steps.
 1. **Contextualize (Understand)**
    - Read the prompt carefully.
    - Consult `docs/file-structure.md` for where code and docs live.
-   - If the task touches auth, the read-only guard, or data fetching, read
-     `docs/app-architecture.md` first.
+   - If the task touches auth, the never-moves-money guard, or data fetching,
+     read `docs/app-architecture.md` first.
    - Use search tools and read existing files to understand the current
      implementation.
 
@@ -74,8 +77,9 @@ Follow this sequence; do not skip steps.
 4. **Verify (Check)**
    - Look up exact commands in `package.json`. Do not guess.
    - Run `pnpm lint` and `pnpm build`. Fix any errors.
-   - Confirm the read-only guard still passes: `curl http://localhost:3000/api/dev/guard-test`
-     should return `{"threw":true,"guard":true,...}`.
+   - Confirm the never-moves-money guard still passes:
+     `curl http://localhost:3000/api/dev/guard-test` should return
+     `{"allPass":true,...}` with all four boundary cases passing.
 
 5. **Document (Wrap-up)**
    - If you changed architecture, data flows, file structure, or the data model,
@@ -84,10 +88,12 @@ Follow this sequence; do not skip steps.
 
 ## Project-Specific Invariants
 
-- **Read-only guard is inviolable.** `xeroFetch` throws `ReadOnlyViolation` on
-  any non-GET. This runs before token logic — it is testable pre-auth. The OAuth
-  token endpoint (`identity.xero.com`) and connections endpoint are intentionally
-  outside the guard (different host).
+- **Never-moves-money guard is inviolable.** `xeroFetch` throws
+  `NeverMovesMoneyViolation` on anything except GET or a `POST /Invoices`
+  with parsed body `Type: "ACCPAY"` + `Status: "DRAFT"`. This runs before
+  token or network logic — it is testable pre-auth. The OAuth token endpoint
+  (`identity.xero.com`) and connections endpoint are intentionally outside
+  the guard (different host).
 - **Single-flight refresh lock.** Xero refresh tokens rotate and are single-use.
   Concurrent refreshes would burn the token. `lib/tokenStore.ts` exposes
   `getRefreshLock`/`setRefreshLock`; `lib/oauth.ts` uses them. Never call

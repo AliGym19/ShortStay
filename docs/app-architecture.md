@@ -41,7 +41,8 @@ ShortStay is a single Next.js app — there is no separate backend service.
 - **`lib/tokenStore.ts`** — in-memory session store behind a `TokenStore`
   interface, with single-flight refresh lock primitives.
 - Auth POSTs (token exchange, refresh) target `identity.xero.com` and are
-  intentionally outside the read-only guard (which covers `api.xero.com` only).
+  intentionally outside the never-moves-money guard (which covers
+  `api.xero.com` only).
 
 ### Service Stubs — the seam
 
@@ -109,29 +110,42 @@ User clicks "Disconnect"
     → redirects to / (shows connect card)
 ```
 
-## 3. The Read-Only Guard
+## 3. The Never-Moves-Money Guard
 
-The guard lives in `xeroFetch` at `lib/xero.ts`:
+The guard lives in `assertPermittedXeroRequest` / `xeroFetch` at `lib/xero.ts`:
 
 ```
+assertPermittedXeroRequest(method, path, body):
+  1. If method is GET → allow
+  2. If method is not POST → throw NeverMovesMoneyViolation
+  3. If path (stripped of query) is not "Invoices" → throw
+  4. Parse body as JSON (the guard does not trust the caller's claims about it)
+  5. If Type !== "ACCPAY" → throw
+  6. If Status !== "DRAFT" → throw
+  7. Otherwise allow
+
 xeroFetch(path, init):
-  1. If init.method is not GET → throw ReadOnlyViolation
+  1. assertPermittedXeroRequest(method, path, init.body) — before any network call
   2. If no session → throw NotConnectedError
   3. If access_token near expiry → refreshSession()
-  4. GET request to api.xero.com/api.xro/2.0/{path}
-  5. If 401 → refreshSession() + retry
+  4. Request to api.xero.com/api.xro/2.0/{path} (GET or the one permitted POST)
+  5. If 401 → refreshSession() + retry (safe to retry a POST too — 401 means
+     Xero rejected auth before processing the request)
   6. If 429 → throw with Retry-After info
   7. If !ok → throw with status + detail
   8. Return JSON body
 ```
 
 Key properties:
-- Guard runs **before** any token logic — testable even while disconnected
-  (`GET /api/dev/guard-test`).
+- Guard runs **before** any token or network logic — testable even while
+  disconnected (`GET /api/dev/guard-test`, four boundary cases: draft ACCPAY
+  passes; `/Payments`, ACCREC, and non-DRAFT status all throw).
 - Applies to all `api.xero.com` traffic only. OAuth POSTs to `identity.xero.com`
   are a different host — they bypass the guard by design.
-- Combined with the scope-limited token (no write scopes), this gives two-layer
-  enforcement.
+- Combined with the scope-limited token (one write scope, `accounting.invoices`,
+  no payment scope), this gives two-layer enforcement. The write path was
+  proven live: a draft ACCPAY bill created via `xeroFetch` and visually
+  confirmed in Xero's Bills to pay → Draft tab.
 
 ## 4. Data Flows
 
@@ -171,6 +185,8 @@ No session (startup / disconnect)
 - **No token exposure.** Tokens are never logged, never rendered in the UI, and
   never sent to the browser (the dashboard decodes the JWT server-side only,
   and only extracts the `scope` claim for display).
+- **One write scope, human-gated.** `accounting.invoices` permits exactly one
+  write shape (draft ACCPAY bills); no payment scope exists. See §3.
 - **Server-only separation.** `lib/env.ts`, `lib/tokenStore.ts`,
   `lib/oauth.ts`, `lib/xero.ts`, and `lib/supabase.ts` are server-only modules.
   They must never be imported from a `"use client"` component.
@@ -186,5 +202,11 @@ components — no job queues planned for v1.
 - **Session / tokens:** in-memory on `globalThis` (no disk). Restart clears it.
 - **Xero data:** not stored locally — fetched live per dashboard load.
   Page-level caching is disabled (`force-dynamic`, `cache: "no-store"`).
-- **Future (Supabase):** Postgres tables for triage queue, forecast cache, and
-  any state Xero doesn't hold. `lib/supabase.ts` is the pre-wired egress point.
+- **App state (SQLite):** `lib/db.ts` (better-sqlite3 + Drizzle,
+  `data/shortstay.db`, gitignored) holds `audit_events`, `prompts`, and
+  `approvals` (`lib/schema.ts`). `lib/audit.ts` and `lib/prompt-registry.ts`
+  are ported from paragon-hil — every prompt mutation appends an audit event;
+  `audit.chain()` walks `parentEventId` back to the root via a recursive CTE.
+- **Future (Supabase):** wired (`lib/supabase.ts`) but unused — no tables,
+  no callers. Reach for it only if a real need for hosted/shared Postgres
+  shows up; SQLite is what the app actually runs on today.

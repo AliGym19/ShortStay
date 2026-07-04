@@ -7,13 +7,6 @@ gives property managers a **revenue forecasting dashboard** and an **agentic
 issue-triage system** — all authenticated through their existing Xero accounting
 account.
 
-<<<<<<< Updated upstream
-## Never-moves-money guarantee
-
-ShortStay **never moves money**. It holds exactly one write scope
-(`accounting.invoices`) used for one thing: creating **draft** ACCPAY bills
-that a human approves inside Xero. No payment scope exists on the token:
-=======
 The product has three pillars, built in order:
 
 1. **Agency Dashboard** (MVP — shipped): live read-only Xero data with token
@@ -35,16 +28,24 @@ Forecasting and triage are fully designed (`docs/forecasting-v1.md`,
 
 ### Shipped (MVP)
 - Xero OAuth2 sign-in with the official "Sign In with Xero" branded button
-- Live read-only dashboard with four data sections
+- Live dashboard with four data sections (Organisation, Contacts, ACCREC
+  Invoices, Bank Transactions)
 - Scope verification — requested vs granted `accounting.*` scopes compared on
   every page load with mismatch warnings
 - Token management: expiry countdown, refresh, disconnect
-- Read-only guard: every non-GET call to the Xero accounting API is rejected
-  at the application layer, on top of the token's scope boundary
+- **Never-moves-money guard**: `lib/xero.ts` hard-throws on every Xero API
+  call except GET or a `POST /Invoices` whose parsed body has
+  `Type: "ACCPAY"` and `Status: "DRAFT"` — proven live end-to-end (a draft
+  bill created and visually confirmed in Xero's Bills to pay → Draft tab)
+- SQLite (Drizzle + better-sqlite3) audit log and prompt registry, ported
+  from paragon-hil — every mutation is append-only audit-chained
+- OpenRouter-backed LLM router (`lib/llm.ts`) with the two triage prompts
+  (`issue-classifier`, `action-stager`) seeded into the registry
 
 ### Planned (v1)
 - Monthly revenue trend + 3-month projection (see `docs/forecasting-v1.md`)
-- Issue intake → LLM classification → review queue (see `docs/triage-v1.md`)
+- Issue intake → LLM classification → stage → human-approved action, wired
+  to the draft-bill write path (see `docs/triage-v1.md`)
 
 ## Tech Stack
 
@@ -53,7 +54,12 @@ Forecasting and triage are fully designed (`docs/forecasting-v1.md`,
 - **Framework**: Next.js 16.2 App Router with React 19.2
 - **Styling**: Tailwind CSS v4 via `@tailwindcss/postcss`
 - **Auth**: Xero OAuth2 (standard auth-code flow with client secret — no PKCE)
-- **Database**: Supabase client wired (`@supabase/supabase-js`), no schema yet
+- **Local storage**: SQLite via Drizzle + better-sqlite3 (`lib/db.ts`,
+  `lib/schema.ts`) — audit log, prompt registry, approvals queue
+- **Future/hosted storage**: Supabase client wired (`lib/supabase.ts`,
+  `@supabase/supabase-js`), no schema yet — not needed by anything shipped
+- **LLM**: OpenRouter (`lib/llm.ts`), tiered model map (`tier:everyday` →
+  Haiku, `tier:judgment` → Opus), verified against OpenRouter's live catalogue
 - **Package manager**: pnpm
 
 No Xero SDK — all API traffic uses raw `fetch` through a single egress point
@@ -61,15 +67,23 @@ No Xero SDK — all API traffic uses raw `fetch` through a single egress point
 
 ## Key Design Decisions
 
-### Why read-only? (and how it's enforced)
+### Why never-moves-money, not read-only? (and how it's enforced)
 
-ShortStay requests **no Xero write scope of any kind**. The nine granular scopes
-are all `*.read`. Two layers guarantee this:
+ShortStay holds exactly one write scope (`accounting.invoices`) used for
+exactly one thing: creating **draft** ACCPAY bills that a human approves
+inside Xero. No payment scope exists on the token. Two layers enforce this:
 
-1. The token Xero issues is scope-bound — it cannot write.
-2. `lib/xero.ts` — the single egress for all accounting API traffic — hard-throws
-   `ReadOnlyViolation` on any non-GET request. This is testable at
-   `GET /api/dev/guard-test` and runs *before* any token logic.
+1. The token Xero issues is scope-bound — no `/Payments`, `/BankTransfers`,
+   or bank-transaction write scope exists on it.
+2. `lib/xero.ts` — the single egress for all accounting API traffic — parses
+   the body of every non-GET request and hard-throws
+   `NeverMovesMoneyViolation` unless it is `POST /Invoices` with
+   `Type: "ACCPAY"` and `Status: "DRAFT"`. Testable at
+   `GET /api/dev/guard-test` (four boundary cases) and runs *before* any
+   token or network logic.
+
+Note: requesting `accounting.invoices` alone caused Xero to auto-grant
+`accounting.invoices.read` on the same token — the write scope subsumes read.
 
 ### Why Demo Company only?
 
@@ -106,10 +120,9 @@ single egress point for future ShortStay state: the triage queue, forecast
 cache, and any data Xero doesn't hold. This file must never be imported from
 a `"use client"` component.
 
-## Read-Only Guarantee
+## Never-Moves-Money Guarantee
 
 ShortStay requests exactly these scopes:
->>>>>>> Stashed changes
 
 ```
 openid profile email offline_access
@@ -122,16 +135,7 @@ Reports scopes are granular per-report for this app — there is no blanket
 `accounting.reports.read`; requesting it returns `invalid_scope`. P&L is the
 one report forecasting v1 needs.
 
-<<<<<<< Updated upstream
-Two layers enforce this: the token cannot touch `/Payments`,
-`/BankTransfers`, or any bank-transaction write (scope boundary), and
-`lib/xero.ts` — the single egress point for all accounting API traffic —
-hard-throws on anything except GET or `POST /Invoices` whose parsed body has
-`Type: "ACCPAY"` and `Status: "DRAFT"` (`/api/dev/guard-test` proves all four
-boundary cases).
-=======
 ## Quick Start
->>>>>>> Stashed changes
 
 **Prerequisites:**
 - Node.js 20 LTS or later
@@ -179,9 +183,11 @@ token storage are out of scope for now.
    the official Sign In with Xero button; no env errors.
 2. Guard test (works pre-auth):
    `curl http://localhost:3000/api/dev/guard-test` →
-   `{"threw":true,"guard":true,"message":"ShortStay is READ-ONLY: refusing POST …"}`
+   `{"allPass":true,"results":[...]}` (four boundary cases: draft ACCPAY
+   passes; `/Payments`, ACCREC, and non-DRAFT status all throw)
 3. Sign In with Xero → log in → pick **Demo Company** → consent screen lists
-   exactly the 9 read-only scopes → redirected back to the dashboard.
+   exactly the 9 scopes (8 read + the one draft-write) → redirected back to
+   the dashboard.
 4. Dashboard shows tenant "Demo Company", scope chips with **no mismatch
    warning**, and all four data sections populated.
 5. Hot-reload persistence: save any file, reload the page → still connected.
@@ -195,12 +201,19 @@ token storage are out of scope for now.
 - `lib/oauth.ts` — authorize URL, code exchange, single-flight refresh
   (Xero refresh tokens rotate and are single-use), `/connections` tenant
   resolution. OAuth POSTs target `identity.xero.com` and are intentionally
-  outside the read-only guard (different host, not the accounting API).
+  outside the never-moves-money guard (different host, not the accounting API).
 - `lib/tokenStore.ts` — session on `globalThis` (survives HMR; restart =
   re-auth by design), behind a `TokenStore` interface.
-- `lib/xero.ts` — `xeroFetch` guard + auto-refresh + the four typed reads.
+- `lib/xero.ts` — `xeroFetch` guard (GET or draft-ACCPAY-POST only) +
+  auto-refresh + the four typed reads.
 - `app/api/auth/*` — connect / callback (state check) / refresh / disconnect.
+- `lib/db.ts`, `lib/schema.ts`, `lib/audit.ts`, `lib/prompt-registry.ts` —
+  SQLite (Drizzle + better-sqlite3), ported from paragon-hil. Every mutation
+  is audit-chained (`parentEventId`).
+- `lib/llm.ts` — OpenRouter router; every completion appends an
+  `llm.completed` audit event with `modelTarget`/`resolvedModel`/`usage`.
 - Tokens are never rendered or logged; the dashboard decodes the access-token
   JWT locally only to display the granted `scope` claim.
 
-Full architecture and data model details are in `docs/`.
+Full architecture and data model details are in `docs/app-architecture.md`
+and `docs/data-schema.md`.
