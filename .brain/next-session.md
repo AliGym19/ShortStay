@@ -1,3 +1,52 @@
+# FIRST: verify the frontend-merge branch (unverified WIP)
+
+Since this file was written, a lot changed — read this section before the
+"Sunday demo day" plan below, which predates it.
+
+**What happened**: Michal Kups (MRKups) is a known collaborator pushing
+directly to `main` in parallel. His docs commit briefly broke `README.md`
+with unresolved conflict markers (fixed, pushed). Separately, Ali supplied a
+second, independently-built Next.js frontend (`shortstay-next.zip` —
+polished UI, mock data, landlord/property/fee-split domain model, its own
+auth stub) to merge with tonight's backend. That merge is in progress on
+branch **`frontend-merge`**, committed but **not pushed and not verified —
+the dev server was never restarted to confirm it actually runs.**
+
+**Do this first, in order**:
+1. `git checkout frontend-merge`, `pnpm install`, `rm -rf .next`, `pnpm dev`.
+2. Click through: `/` → redirects to `/login`. "Continue in demo mode" →
+   `/dashboard` renders landlord/finance/approvals panels (mock data) AND
+   the Xero connection panel (`src/components/XeroDataPanel.tsx`) below them.
+3. Disconnect any demo state, click "Sign In with Xero" → real OAuth flow
+   (`src/app/api/auth/connect`) → consent → back on `/dashboard` with real
+   Demo Company data in the Xero panel, granted-scope chips correct.
+4. `curl localhost:3000/api/dev/guard-test` — still 4/4 passing (guard code
+   didn't change, but confirm the move didn't break the route).
+5. Try `add-records` for an `invoice` or `repair` type with a supplier name
+   that exactly matches a real Xero contact (e.g. "Basket Shop") — confirm
+   a draft ACCPAY bill appears in Xero. A non-matching name should surface
+   `xeroNote` explaining no contact was found, not fail silently.
+6. If all of the above passes: merge `frontend-merge` → `main`, push.
+   If something's broken: fix on the branch, do NOT push straight to `main`
+   (that's what caused MRKups' broken-README incident tonight).
+
+**Known placeholders in the merge, not bugs**:
+- Landlord/property/fee data is still 100% mock (`src/lib/data/mock.ts`) —
+  no real backend. Deferred to future Supabase work (Ali: "defer for later
+  supabase table work, make sure its xero compatible" — the seam is
+  `Landlord.xeroContactId` / `Approval.xeroContactId` / `.xeroInvoiceId` in
+  `src/lib/types.ts`, all optional, unwired).
+- `add-records/actions.ts`'s Xero contact matching is exact-name-match
+  against `getContacts()` — a stopgap to prove the write path, not a real
+  identity system. Real linking needs the Supabase table above.
+- Draft-bill account code is hardcoded to `"429"` in `draftBill()` —
+  needs a real category→account-code mapping eventually.
+- `docs/`, `AGENTS.md`, `CLAUDE.md` describe tonight's *backend* accurately
+  but do not yet reflect the frontend merge (new routes, new components,
+  the session-bridge). Update them once the merge is verified and lands.
+
+---
+
 # Next session — Sunday demo day, 08:00 start, features freeze 15:00
 
 Order matters — each item depends on the one before it being live.
