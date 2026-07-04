@@ -127,7 +127,7 @@ ShortStay requests exactly these scopes:
 ```
 openid profile email offline_access
 accounting.settings.read accounting.contacts.read
-accounting.invoices.read accounting.banktransactions.read
+accounting.invoices accounting.banktransactions.read
 accounting.reports.profitandloss.read
 ```
 
