@@ -30,3 +30,10 @@
 - **2026-07-04 — Scope-diff display covers `accounting.*` only** — identity
   scopes don't appear in the access token's scope claim, so diffing them would
   produce false mismatch warnings.
+- **2026-07-04 — Supabase wired for future storage, no schema yet.**
+  `lib/supabase.ts` exports `getSupabase()`: a lazy server-only singleton
+  using `@supabase/supabase-js` + `SUPABASE_SECRET_KEY` (bypasses RLS — never
+  import this file from a `"use client"` component). Not a Xero API proxy —
+  Supabase has no such connector; this is ShortStay's own Postgres for state
+  Xero doesn't hold (triage queue, forecast cache — both still "storage TBD").
+  No tables/queries/callers exist yet; deferred to a follow-up conversation.

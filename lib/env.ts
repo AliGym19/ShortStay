@@ -8,3 +8,14 @@ export function xeroCredentials(): { clientId: string; clientSecret: string } {
   }
   return { clientId, clientSecret };
 }
+
+export function supabaseCredentials(): { url: string; secretKey: string } {
+  const url = process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !secretKey) {
+    throw new Error(
+      "Missing SUPABASE_URL / SUPABASE_SECRET_KEY. Copy .env.example to .env and fill in the credentials from your Supabase project settings."
+    );
+  }
+  return { url, secretKey };
+}
