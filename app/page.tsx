@@ -1,65 +1,173 @@
-import Image from "next/image";
+import ConnectionCard from "@/components/ConnectionCard";
+import DataSection from "@/components/DataSection";
+import XeroSignInButton from "@/components/XeroSignInButton";
+import { decodeJwtPayload } from "@/lib/jwt";
+import { REDIRECT_URI, REQUESTED_SCOPES } from "@/lib/oauth";
+import { tokenStore } from "@/lib/tokenStore";
+import {
+  getAccRecInvoices,
+  getBankTransactions,
+  getContacts,
+  getOrganisation,
+} from "@/lib/xero";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+// Renders per-request from process-local token state — never cache.
+export const dynamic = "force-dynamic";
+
+async function attempt<T>(fn: () => Promise<T>): Promise<{ data?: T; error?: string }> {
+  try {
+    return { data: await fn() };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+  const session = tokenStore.get();
+
+  if (!session) {
+    return (
+      <div className="mx-auto max-w-xl">
+        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8">
+          <h1 className="text-lg font-semibold">Connect your Xero organisation</h1>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            ShortStay reads your Xero data to power STR revenue forecasting and
+            issue triage. Access is <strong>strictly read-only</strong> — no
+            write scope is ever requested.
+          </p>
+          {error ? (
+            <p className="mt-4 rounded border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-900 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+              {decodeURIComponent(error)}
+            </p>
+          ) : null}
+          <div className="mt-6">
+            <XeroSignInButton />
+          </div>
+          <p className="mt-6 text-xs text-zinc-500">
+            First time? The app&apos;s redirect URI{" "}
+            <code className="font-mono">{REDIRECT_URI}</code> must be registered
+            at developer.xero.com/myapps, and the Demo Company must be active in
+            your Xero account.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
+    );
+  }
+
+  // Granted scopes come from the access token itself — proof of what the
+  // consent screen actually granted, not what we asked for. Identity scopes
+  // (openid/profile/email/offline_access) don't appear in the access token's
+  // scope claim, so the mismatch check covers accounting.* only.
+  let grantedScopes: string[] = [];
+  try {
+    const payload = decodeJwtPayload(session.accessToken);
+    grantedScopes = Array.isArray(payload.scope)
+      ? (payload.scope as string[])
+      : typeof payload.scope === "string"
+        ? payload.scope.split(" ")
+        : [];
+  } catch {
+    grantedScopes = [];
+  }
+  const missingScopes = REQUESTED_SCOPES.filter(
+    (s) => s.startsWith("accounting.") && !grantedScopes.includes(s)
+  );
+
+  const [org, contacts, invoices, bankTxns] = await Promise.all([
+    attempt(getOrganisation),
+    attempt(getContacts),
+    attempt(getAccRecInvoices),
+    attempt(getBankTransactions),
+  ]);
+
+  return (
+    <div className="flex flex-col gap-6">
+      {error ? (
+        <p className="rounded border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-900 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+          {decodeURIComponent(error)}
+        </p>
+      ) : null}
+
+      <ConnectionCard
+        tenantName={session.tenantName}
+        expiresAt={session.expiresAt}
+        grantedScopes={grantedScopes}
+        missingScopes={missingScopes}
+      />
+
+      <DataSection
+        title="Organisation"
+        error={org.error}
+        columns={["Name", "Legal name", "Currency", "Country", "Type"]}
+        rows={
+          org.data
+            ? [
+                [
+                  org.data.Name,
+                  org.data.LegalName,
+                  org.data.BaseCurrency,
+                  org.data.CountryCode,
+                  org.data.OrganisationType,
+                ],
+              ]
+            : []
+        }
+        raw={org.data}
+      />
+
+      <DataSection
+        title="Contacts"
+        subtitle={`Showing up to 20 of ${contacts.data?.length ?? 0} on page 1`}
+        error={contacts.error}
+        columns={["Name", "Email", "Customer", "Supplier"]}
+        rows={(contacts.data ?? [])
+          .slice(0, 20)
+          .map((c) => [c.Name, c.EmailAddress, c.IsCustomer, c.IsSupplier])}
+        raw={contacts.data?.slice(0, 20)}
+      />
+
+      <DataSection
+        title="Invoices (ACCREC — revenue)"
+        subtitle="Sales invoices are the STR revenue signal the forecast will build on"
+        error={invoices.error}
+        columns={["Number", "Contact", "Date", "Due", "Status", "Total", "Paid"]}
+        rows={(invoices.data ?? [])
+          .slice(0, 20)
+          .map((inv) => [
+            inv.InvoiceNumber,
+            inv.Contact?.Name,
+            inv.DateString?.slice(0, 10),
+            inv.DueDateString?.slice(0, 10),
+            inv.Status,
+            inv.Total,
+            inv.AmountPaid,
+          ])}
+        raw={invoices.data?.slice(0, 20)}
+      />
+
+      <DataSection
+        title="Bank transactions"
+        subtitle="RECEIVE rows (highlighted) are the cash-side forecast input"
+        error={bankTxns.error}
+        columns={["Date", "Type", "Contact", "Account", "Total", "Status"]}
+        rows={(bankTxns.data ?? [])
+          .slice(0, 20)
+          .map((t) => [
+            t.DateString?.slice(0, 10),
+            t.Type,
+            t.Contact?.Name,
+            t.BankAccount?.Name,
+            t.Total,
+            t.Status,
+          ])}
+        highlight={(bankTxns.data ?? []).slice(0, 20).map((t) => t.Type === "RECEIVE")}
+        raw={bankTxns.data?.slice(0, 20)}
+      />
     </div>
   );
 }
