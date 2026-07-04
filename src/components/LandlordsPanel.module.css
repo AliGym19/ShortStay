@@ -1,0 +1,37 @@
+.panel {
+	padding: 24px;
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+.head {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-end;
+	gap: 16px;
+}
+.head h2 {
+	font-size: 20px;
+	margin-top: 4px;
+}
+.count {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 13px;
+	color: var(--in);
+	font-weight: 500;
+	white-space: nowrap;
+}
+.dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--in);
+	box-shadow: 0 0 0 3px var(--in-soft);
+}
+.grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+	gap: 14px;
+}

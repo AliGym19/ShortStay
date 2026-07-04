@@ -1,0 +1,59 @@
+.flow {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.track {
+	display: flex;
+	width: 100%;
+	height: var(--h);
+	border-radius: 999px;
+	overflow: hidden;
+	background: var(--porcelain-sunk);
+	gap: 2px;
+}
+.seg {
+	display: block;
+	min-width: 3px;
+	border-radius: 2px;
+	transition: flex-basis 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.tone-out {
+	background: var(--out);
+}
+.tone-fee {
+	background: var(--fee);
+}
+.tone-in {
+	background: var(--in);
+}
+
+.legend {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 20px;
+}
+.legend li {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+.dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 3px;
+	flex: none;
+	transform: translateY(1px);
+}
+.lab {
+	color: var(--muted);
+	font-size: 13px;
+}
+.val {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--ink);
+}
