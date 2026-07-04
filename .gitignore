@@ -43,3 +43,6 @@ next-env.d.ts
 # keep the env template; ignore token cache fallback
 !.env.example
 .tokens.json
+
+# local sqlite database
+data/
