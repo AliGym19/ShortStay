@@ -7,13 +7,6 @@ gives property managers a **revenue forecasting dashboard** and an **agentic
 issue-triage system** — all authenticated through their existing Xero accounting
 account.
 
-<<<<<<< Updated upstream
-## Never-moves-money guarantee
-
-ShortStay **never moves money**. It holds exactly one write scope
-(`accounting.invoices`) used for one thing: creating **draft** ACCPAY bills
-that a human approves inside Xero. No payment scope exists on the token:
-=======
 The product has three pillars, built in order:
 
 1. **Agency Dashboard** (MVP — shipped): live read-only Xero data with token
@@ -109,12 +102,11 @@ a `"use client"` component.
 ## Read-Only Guarantee
 
 ShortStay requests exactly these scopes:
->>>>>>> Stashed changes
 
 ```
 openid profile email offline_access
 accounting.settings.read accounting.contacts.read
-accounting.invoices accounting.banktransactions.read
+accounting.invoices.read accounting.banktransactions.read
 accounting.reports.profitandloss.read
 ```
 
@@ -122,16 +114,7 @@ Reports scopes are granular per-report for this app — there is no blanket
 `accounting.reports.read`; requesting it returns `invalid_scope`. P&L is the
 one report forecasting v1 needs.
 
-<<<<<<< Updated upstream
-Two layers enforce this: the token cannot touch `/Payments`,
-`/BankTransfers`, or any bank-transaction write (scope boundary), and
-`lib/xero.ts` — the single egress point for all accounting API traffic —
-hard-throws on anything except GET or `POST /Invoices` whose parsed body has
-`Type: "ACCPAY"` and `Status: "DRAFT"` (`/api/dev/guard-test` proves all four
-boundary cases).
-=======
 ## Quick Start
->>>>>>> Stashed changes
 
 **Prerequisites:**
 - Node.js 20 LTS or later
