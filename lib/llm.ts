@@ -13,14 +13,12 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODELS_URL = "https://openrouter.ai/api/v1/models";
 
 // modelTarget strings not in the map pass through as-is (assumed to be a
-// literal OpenRouter model id).
-// 2026-07-04: Ali wants Sonnet 5 for every LLM decision for the time being —
-// both tiers point at the same model until told otherwise. verifyTierModels()
-// checks this id against OpenRouter's live catalogue before first use; if it
-// 404s, don't guess a substitute — surface the real anthropic/* list.
+// literal OpenRouter model id). verifyTierModels() checks these ids against
+// OpenRouter's live catalogue before first use; if one 404s, don't guess a
+// substitute — surface the real anthropic/* list.
 export const TIERS: Record<string, string> = {
-  "tier:everyday": "anthropic/claude-sonnet-5",
-  "tier:judgment": "anthropic/claude-sonnet-5",
+  "tier:everyday": "anthropic/claude-haiku-4.5",
+  "tier:judgment": "anthropic/claude-opus-4.8",
 };
 
 export function resolveModel(modelTarget: string): string {
