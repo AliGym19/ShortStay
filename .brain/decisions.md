@@ -1,5 +1,22 @@
 # Decisions
 
+- **2026-07-04 (evening) — v1.0 spec reconciled against reality; architecture kept.**
+  Ali's pasted hackathon spec called for Custom Connection auth, xero-node,
+  Supabase Postgres, and the Anthropic SDK. All four swaps rejected after
+  investigation (spec appears drafted against PEA's unbuilt reference docs):
+  auth-code OAuth is proven live and endorsed by docs/xerosso-skill.md for
+  single-org apps; raw fetch is an existing ADR (guard parses the raw body);
+  audit.ts's recursive CTE is SQLite-specific; OpenRouter reaches the same
+  Claude models. Adopted from the spec instead: GET whitelist in the guard
+  (spec's 6 entries + Organisation + Reports/ProfitAndLoss — both already
+  live-depended-on), closed audit vocabulary enforced in audit.append()
+  (spec's 11 + prompt.retired + llm.completed already emitted here), the
+  §8 prototype UI (ported to src/components/ShortStayApp.tsx), and the
+  statement/guardrails/receipt-coding feature set. Scope string unchanged —
+  spec's explicit accounting.invoices.read is redundant per the live
+  auto-grant finding above. Vercel deploy deferred: in-memory tokens +
+  local SQLite don't survive serverless.
+
 - **2026-07-04 — Write scope subsumes read (VERIFIED live).** Requested
   `accounting.invoices` only (dropped `.read`); the consent grant came back
   with BOTH `accounting.invoices` and `accounting.invoices.read` — Xero

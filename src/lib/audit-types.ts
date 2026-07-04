@@ -14,6 +14,30 @@
  *   3. Opaque subject identity: subjectType/subjectId are strings.
  */
 
+/**
+ * Closed event vocabulary. audit.append() throws on anything outside this
+ * set — the vocabulary is an enforcement mechanism, not documentation.
+ * There is deliberately no payment.* and no transfer.* event type: an
+ * action that moves money cannot even be *recorded*, let alone performed.
+ */
+export const KNOWN_EVENT_TYPES = [
+  "receipt.captured",
+  "receipt.coded",
+  "bill.drafted",
+  "booking.recorded",
+  "payout.matched",
+  "statement.assembled",
+  "statement.held",
+  "statement.approved",
+  "guard.evaluated",
+  "prompt.created",
+  "prompt.updated",
+  "prompt.retired",
+  "llm.completed",
+] as const;
+
+export type AuditEventType = (typeof KNOWN_EVENT_TYPES)[number];
+
 export interface AuditEvent {
   readonly id: string;
   readonly eventType: string;

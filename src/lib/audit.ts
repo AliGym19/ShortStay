@@ -1,10 +1,11 @@
 import "server-only";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
-import type {
-  AuditEvent,
-  AuditEventInput,
-  AuditLog,
-  AuditQuery,
+import {
+  KNOWN_EVENT_TYPES,
+  type AuditEvent,
+  type AuditEventInput,
+  type AuditLog,
+  type AuditQuery,
 } from "@/lib/audit-types";
 import { db } from "@/lib/db";
 import { auditEvents } from "@/lib/schema";
@@ -30,8 +31,18 @@ function rowToEvent(row: Row): AuditEvent {
   };
 }
 
+const EVENT_TYPE_SET: ReadonlySet<string> = new Set(KNOWN_EVENT_TYPES);
+
 class SqliteAuditLog implements AuditLog {
   async append(input: AuditEventInput): Promise<AuditEvent> {
+    if (!EVENT_TYPE_SET.has(input.eventType)) {
+      throw new Error(
+        `audit.append: "${input.eventType}" is not in the closed event ` +
+          `vocabulary (${KNOWN_EVENT_TYPES.join(", ")}). ` +
+          `Extend KNOWN_EVENT_TYPES deliberately — never with a payment.* ` +
+          `or transfer.* type.`
+      );
+    }
     const [row] = await db
       .insert(auditEvents)
       .values({

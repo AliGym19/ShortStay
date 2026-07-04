@@ -4,7 +4,7 @@ import {
   NeverMovesMoneyViolation,
 } from "@/lib/xero";
 
-// Proves the never-moves-money guard against all four boundary cases by
+// Proves the never-moves-money guard against every boundary case by
 // calling the guard function directly — zero network traffic, works while
 // disconnected.
 interface Case {
@@ -48,6 +48,43 @@ const CASES: Case[] = [
         "POST",
         "Invoices",
         JSON.stringify({ Type: "ACCPAY", Status: "AUTHORISED" })
+      ),
+  },
+  {
+    name: "GET /Payments throws (reads are whitelisted too)",
+    expect: "throw",
+    run: () => assertPermittedXeroRequest("GET", "Payments", undefined),
+  },
+  {
+    name: "GET /Invoices/{id} passes (read-back after draft)",
+    expect: "pass",
+    run: () =>
+      assertPermittedXeroRequest("GET", "Invoices/abc-123", undefined),
+  },
+  {
+    name: "GET /Reports/ProfitAndLoss passes",
+    expect: "pass",
+    run: () =>
+      assertPermittedXeroRequest(
+        "GET",
+        "Reports/ProfitAndLoss?periods=11&timeframe=MONTH",
+        undefined
+      ),
+  },
+  {
+    name: "GET /Reports/BalanceSheet throws (P&L is the only report)",
+    expect: "throw",
+    run: () =>
+      assertPermittedXeroRequest("GET", "Reports/BalanceSheet", undefined),
+  },
+  {
+    name: "PUT /Invoices throws (no updates, ever)",
+    expect: "throw",
+    run: () =>
+      assertPermittedXeroRequest(
+        "PUT",
+        "Invoices",
+        JSON.stringify({ Type: "ACCPAY", Status: "DRAFT" })
       ),
   },
 ];

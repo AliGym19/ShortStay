@@ -10,6 +10,21 @@ const EXPIRY_MARGIN_MS = 60_000;
 export class NeverMovesMoneyViolation extends Error {}
 export class NotConnectedError extends Error {}
 
+// Every call ShortStay is allowed to make, by first path segment. GETs off
+// this list are refused too — the guard whitelists the entire API surface,
+// not just writes. Deviations from the spec's six-entry list, both needed
+// by live features: Organisation (ConnectionCard) and Reports/ProfitAndLoss
+// (forecast; the only permitted report).
+const ALLOWED_GET_SEGMENTS = new Set([
+  "contacts",
+  "accounts",
+  "trackingcategories",
+  "invoices",
+  "banktransactions",
+  "organisation",
+  "reports",
+]);
+
 // Never-moves-money invariant. The ONLY permitted write, ever, is
 // POST /Invoices with body Type "ACCPAY" and Status "DRAFT". The body is
 // parsed here — the guard does not trust the caller's claims about it.
@@ -20,7 +35,8 @@ export function assertPermittedXeroRequest(
   body: unknown
 ): void {
   const m = method.toUpperCase();
-  if (m === "GET") return;
+  const cleanPath = path.split("?")[0].replace(/^\/+|\/+$/g, "");
+  const segments = cleanPath.toLowerCase().split("/");
 
   const refuse = (why: string): never => {
     throw new NeverMovesMoneyViolation(
@@ -29,9 +45,18 @@ export function assertPermittedXeroRequest(
     );
   };
 
+  if (m === "GET") {
+    if (!ALLOWED_GET_SEGMENTS.has(segments[0])) {
+      return refuse("GET is permitted to whitelisted resources only");
+    }
+    if (segments[0] === "reports" && segments[1] !== "profitandloss") {
+      return refuse("the only permitted report is Reports/ProfitAndLoss");
+    }
+    return;
+  }
+
   if (m !== "POST") refuse("only GET and the single draft-bill POST exist");
-  const cleanPath = path.split("?")[0].replace(/^\/+|\/+$/g, "");
-  if (cleanPath.toLowerCase() !== "invoices") {
+  if (segments.join("/") !== "invoices") {
     refuse("POST is permitted to /Invoices only");
   }
   if (typeof body !== "string") {
