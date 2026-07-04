@@ -1,25 +1,57 @@
 import { refreshSession } from "./oauth";
 import { tokenStore, type XeroSession } from "./tokenStore";
 
-// Single egress point for ALL Xero accounting API traffic. Every data read in
-// the app goes through xeroFetch — which is what makes the read-only guard
-// below airtight.
+// Single egress point for ALL Xero accounting API traffic. Every call in the
+// app goes through xeroFetch — which is what makes the never-moves-money
+// guard below airtight.
 const XERO_API_BASE = "https://api.xero.com/api.xro/2.0/";
 const EXPIRY_MARGIN_MS = 60_000;
 
-export class ReadOnlyViolation extends Error {}
+export class NeverMovesMoneyViolation extends Error {}
 export class NotConnectedError extends Error {}
 
-export async function xeroFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  // Guard runs before any token logic so it is enforceable (and testable)
-  // even while disconnected. ShortStay holds no write scopes either — this is
-  // the second, in-process layer of that guarantee.
-  const method = (init.method ?? "GET").toUpperCase();
-  if (method !== "GET") {
-    throw new ReadOnlyViolation(
-      `ShortStay is READ-ONLY: refusing ${method} ${path}. Only GET requests to the Xero API are permitted.`
+// Never-moves-money invariant. The ONLY permitted write, ever, is
+// POST /Invoices with body Type "ACCPAY" and Status "DRAFT". The body is
+// parsed here — the guard does not trust the caller's claims about it.
+// Exported so guard-test can assert every case with zero network traffic.
+export function assertPermittedXeroRequest(
+  method: string,
+  path: string,
+  body: unknown
+): void {
+  const m = method.toUpperCase();
+  if (m === "GET") return;
+
+  const refuse = (why: string): never => {
+    throw new NeverMovesMoneyViolation(
+      `Never-moves-money invariant: refusing ${m} ${path} — ${why}. ` +
+        `The only permitted Xero write is POST /Invoices with Type "ACCPAY" and Status "DRAFT".`
     );
+  };
+
+  if (m !== "POST") refuse("only GET and the single draft-bill POST exist");
+  const cleanPath = path.split("?")[0].replace(/^\/+|\/+$/g, "");
+  if (cleanPath.toLowerCase() !== "invoices") {
+    refuse("POST is permitted to /Invoices only");
   }
+  if (typeof body !== "string") {
+    return refuse("write body must be a JSON string the guard can inspect");
+  }
+  let parsed: { Type?: unknown; Status?: unknown };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return refuse("write body is not valid JSON");
+  }
+  if (parsed.Type !== "ACCPAY") refuse('invoice Type must be "ACCPAY"');
+  if (parsed.Status !== "DRAFT") refuse('invoice Status must be "DRAFT"');
+}
+
+export async function xeroFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Guard runs before any token or network logic so it is enforceable (and
+  // testable) even while disconnected.
+  const method = (init.method ?? "GET").toUpperCase();
+  assertPermittedXeroRequest(method, path, init.body);
 
   let session = tokenStore.get();
   if (!session) throw new NotConnectedError("Not connected to Xero.");
@@ -27,10 +59,12 @@ export async function xeroFetch<T>(path: string, init: RequestInit = {}): Promis
     session = await refreshSession();
   }
 
-  let res = await apiGet(path, session);
+  let res = await apiRequest(method, path, init.body, session);
   if (res.status === 401) {
+    // Safe to retry the POST too: a 401 means Xero rejected auth before
+    // processing the request.
     session = await refreshSession();
-    res = await apiGet(path, session);
+    res = await apiRequest(method, path, init.body, session);
   }
   if (res.status === 429) {
     const retryAfter = res.headers.get("Retry-After");
@@ -40,18 +74,28 @@ export async function xeroFetch<T>(path: string, init: RequestInit = {}): Promis
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Xero GET ${path} failed: ${res.status} ${detail.slice(0, 300)}`);
+    throw new Error(
+      `Xero ${method} ${path} failed: ${res.status} ${detail.slice(0, 300)}`
+    );
   }
   return res.json();
 }
 
-function apiGet(path: string, session: XeroSession): Promise<Response> {
+function apiRequest(
+  method: string,
+  path: string,
+  body: BodyInit | null | undefined,
+  session: XeroSession
+): Promise<Response> {
   return fetch(new URL(path, XERO_API_BASE), {
+    method,
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
       "Xero-tenant-id": session.tenantId,
       Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
     },
+    ...(body ? { body } : {}),
     cache: "no-store",
   });
 }

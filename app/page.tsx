@@ -37,8 +37,9 @@ export default async function Dashboard({
           <h1 className="text-lg font-semibold">Connect your Xero organisation</h1>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
             ShortStay reads your Xero data to power STR revenue forecasting and
-            issue triage. Access is <strong>strictly read-only</strong> — no
-            write scope is ever requested.
+            issue triage. It <strong>never moves money</strong> — the only
+            write it can ever perform is a draft bill a human approves in Xero;
+            no payment scope is requested.
           </p>
           {error ? (
             <p className="mt-4 rounded border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-900 px-3 py-2 text-sm text-red-700 dark:text-red-300">

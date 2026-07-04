@@ -7,14 +7,16 @@ automations and an agency dashboard that signs in with Xero.
 Xero **Demo Company** org. Forecasting and triage are designed
 (`docs/forecasting-v1.md`, `docs/triage-v1.md`) but not yet built.
 
-## Read-only guarantee
+## Never-moves-money guarantee
 
-ShortStay requests **no Xero write scope of any kind**:
+ShortStay **never moves money**. It holds exactly one write scope
+(`accounting.invoices`) used for one thing: creating **draft** ACCPAY bills
+that a human approves inside Xero. No payment scope exists on the token:
 
 ```
 openid profile email offline_access
 accounting.settings.read accounting.contacts.read
-accounting.invoices.read accounting.banktransactions.read
+accounting.invoices accounting.banktransactions.read
 accounting.reports.profitandloss.read
 ```
 
@@ -22,9 +24,12 @@ accounting.reports.profitandloss.read
 `accounting.reports.read`; requesting it returns `invalid_scope`. P&L is the
 one report forecasting v1 needs.)
 
-Two layers enforce this: the token Xero issues is incapable of writes (scope
-boundary), and `lib/xero.ts` — the single egress point for all accounting API
-traffic — hard-throws on any non-GET request (`/api/dev/guard-test` proves it).
+Two layers enforce this: the token cannot touch `/Payments`,
+`/BankTransfers`, or any bank-transaction write (scope boundary), and
+`lib/xero.ts` — the single egress point for all accounting API traffic —
+hard-throws on anything except GET or `POST /Invoices` whose parsed body has
+`Type: "ACCPAY"` and `Status: "DRAFT"` (`/api/dev/guard-test` proves all four
+boundary cases).
 
 ## Setup
 

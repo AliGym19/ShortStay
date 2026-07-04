@@ -60,7 +60,7 @@ export default function ConnectionCard({
           </p>
         ) : (
           <p className="mt-3 text-xs text-green-700 dark:text-green-400">
-            All requested accounting scopes granted (read-only).
+            All requested accounting scopes granted (never-moves-money set).
           </p>
         )}
       </div>

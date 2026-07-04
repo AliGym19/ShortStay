@@ -12,7 +12,12 @@ export const TOKEN_URL = "https://identity.xero.com/connect/token";
 export const CONNECTIONS_URL = "https://api.xero.com/connections";
 export const REDIRECT_URI = "http://localhost:3000/api/auth/callback";
 
-// Granular read-only scope set. ShortStay requests NO write scope of any kind.
+// Never-moves-money scope set: one write scope (accounting.invoices, for
+// draft ACCPAY bills only — enforced by the guard in lib/xero.ts), no payment
+// scope of any kind. accounting.invoices.read is deliberately absent: we are
+// testing whether the write scope subsumes read. If invoice read-backs 403
+// with insufficient_scope, add it back and record the finding in
+// .brain/decisions.md.
 export const REQUESTED_SCOPES = [
   "openid",
   "profile",
@@ -20,7 +25,7 @@ export const REQUESTED_SCOPES = [
   "offline_access",
   "accounting.settings.read",
   "accounting.contacts.read",
-  "accounting.invoices.read",
+  "accounting.invoices",
   "accounting.banktransactions.read",
   // Reports scopes are granular per-report for this app — there is no
   // blanket accounting.reports.read (requesting it → invalid_scope).
