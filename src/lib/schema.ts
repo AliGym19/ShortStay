@@ -28,6 +28,49 @@ export const prompts = sqliteTable("prompts", {
     .$defaultFn(() => new Date()),
 });
 
+// Local registry joining a Xero landlord contact to the properties ShortStay
+// manages for them. Rates are stored as decimal strings ("0.15"); all money
+// math happens in integer pence (lib/statement.ts).
+export const properties = sqliteTable("properties", {
+  id: text("id").primaryKey(), // "P1"
+  name: text("name").notNull(),
+  area: text("area"),
+  landlordContactId: text("landlord_contact_id").notNull(), // Xero ContactID
+  landlordName: text("landlord_name").notNull(),
+  trackingOptionId: text("tracking_option_id"), // Xero TrackingOptionID, if org has a Property category
+  commissionRate: text("commission_rate").notNull(), // "0.15"
+  agencyFeeRate: text("agency_fee_rate").notNull(), // "0.12"
+});
+
+// Assembled statement snapshots + approval state. Every line in `lines`
+// carries { sourceType, sourceId } — a Xero id or "computed". Totals are
+// integer pence.
+export const statements = sqliteTable("statements", {
+  id: text("id").primaryKey().$defaultFn(uuid),
+  landlordContactId: text("landlord_contact_id").notNull(),
+  month: text("month").notNull(), // "2026-06"
+  lines: text("lines", { mode: "json" }).notNull(),
+  totals: text("totals", { mode: "json" }).notNull(),
+  status: text("status").notNull().default("assembled"), // "assembled" | "held" | "approved"
+  approvedBy: text("approved_by"),
+  approvedAt: integer("approved_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// Seeded booking-level detail (Booking.com has no API here). grossPence is
+// integer pence; payout matching (lib/match.ts) computes net as
+// gross × (1 − commission) per booking.
+export const bookings = sqliteTable("bookings", {
+  id: text("id").primaryKey(), // "bk-201"
+  propertyId: text("property_id").notNull(),
+  guest: text("guest"),
+  nights: integer("nights"),
+  grossPence: integer("gross_pence").notNull(),
+  checkIn: text("check_in").notNull(), // "2026-06-02"
+});
+
 export const approvals = sqliteTable("approvals", {
   id: text("id").primaryKey().$defaultFn(uuid),
   kind: text("kind").notNull(),
