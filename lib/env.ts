@@ -9,6 +9,16 @@ export function xeroCredentials(): { clientId: string; clientSecret: string } {
   return { clientId, clientSecret };
 }
 
+export function openrouterKey(): string {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) {
+    throw new Error(
+      "Missing OPENROUTER_API_KEY. Copy .env.example to .env and fill in the key from openrouter.ai/keys."
+    );
+  }
+  return key;
+}
+
 export function supabaseCredentials(): { url: string; secretKey: string } {
   const url = process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
