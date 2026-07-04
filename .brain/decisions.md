@@ -1,5 +1,16 @@
 # Decisions
 
+- **2026-07-04 — Write scope subsumes read (VERIFIED live).** Requested
+  `accounting.invoices` only (dropped `.read`); the consent grant came back
+  with BOTH `accounting.invoices` and `accounting.invoices.read` — Xero
+  auto-adds the read form alongside the write scope. Invoice read-backs work,
+  no 403. Requested set is now: `openid profile email offline_access
+  accounting.settings.read accounting.contacts.read accounting.invoices
+  accounting.banktransactions.read accounting.reports.profitandloss.read`.
+  Why: one write scope for draft ACCPAY bills (never-moves-money invariant —
+  drafts only, human approves in Xero; guard in lib/xero.ts enforces
+  Type/Status by parsing the body). No payment scope exists on the token.
+
 - **2026-07-04 — Read-only Xero access.** Scope string (exact):
   `openid profile email offline_access accounting.settings.read accounting.contacts.read accounting.invoices.read accounting.banktransactions.read accounting.reports.profitandloss.read`.
   No write scope of any kind. Second layer: `xeroFetch` hard-throws on non-GET.
