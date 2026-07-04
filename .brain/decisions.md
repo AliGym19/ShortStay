@@ -1,8 +1,16 @@
 # Decisions
 
-- **2026-07-04 — Read-only Xero access.** Scope string (granular, exact):
-  `openid profile email offline_access accounting.settings.read accounting.contacts.read accounting.invoices.read accounting.banktransactions.read accounting.reports.read`.
+- **2026-07-04 — Read-only Xero access.** Scope string (exact):
+  `openid profile email offline_access accounting.settings.read accounting.contacts.read accounting.invoices.read accounting.banktransactions.read accounting.reports.profitandloss.read`.
   No write scope of any kind. Second layer: `xeroFetch` hard-throws on non-GET.
+  History: first attempt included blanket `accounting.reports.read` →
+  `invalid_scope` at the live authorize endpoint. Misdiagnosed once as the
+  granular invoice/banktxn scopes; the app's actual scope list (pasted from
+  the developer portal) showed reports scopes are per-report only
+  (`accounting.reports.profitandloss.read` etc.) and there is no
+  `accounting.transactions.read` for this app. P&L chosen as the single
+  report scope forecasting v1 needs; add more per-report scopes only when a
+  feature pulls them.
 - **2026-07-04 — Demo Company org only** for MVP; never a real/PEA org.
 - **2026-07-04 — Next.js 16 App Router**, port 3000, raw `fetch` (no xero-node
   SDK — transparency over convenience).

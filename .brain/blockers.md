@@ -1,10 +1,6 @@
 # Blockers
 
 ## Open
-- **B1 — Xero app credentials not yet in `.env`.** Ali: create/confirm a Web
-  app at developer.xero.com/myapps, add redirect URI
-  `http://localhost:3000/api/auth/callback` (character-exact), copy client
-  ID + secret into `.env`. OAuth flow untestable until then.
 - **B2 — Demo Company must be active** in Ali's Xero account (my.xero.com org
   switcher) or it won't appear on the consent screen. Note: Demo Company
   auto-resets ~every 28 days (harmless for MVP, data just changes).
@@ -16,4 +12,8 @@
   unaffected.
 
 ## Resolved
-- (none yet)
+- **B1 — Xero app credentials** (resolved 2026-07-04): `.env` populated,
+  confirmed gitignored. Secret was pasted in a Claude chat to get here —
+  regenerate it at developer.xero.com after testing. Still verify the
+  redirect URI `http://localhost:3000/api/auth/callback` is registered on
+  the app (part of B2's live test).

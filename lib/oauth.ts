@@ -22,7 +22,10 @@ export const REQUESTED_SCOPES = [
   "accounting.contacts.read",
   "accounting.invoices.read",
   "accounting.banktransactions.read",
-  "accounting.reports.read",
+  // Reports scopes are granular per-report for this app — there is no
+  // blanket accounting.reports.read (requesting it → invalid_scope).
+  // P&L is the one report forecasting v1 needs.
+  "accounting.reports.profitandloss.read",
 ];
 
 interface TokenResponse {

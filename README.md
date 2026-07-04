@@ -15,8 +15,12 @@ ShortStay requests **no Xero write scope of any kind**:
 openid profile email offline_access
 accounting.settings.read accounting.contacts.read
 accounting.invoices.read accounting.banktransactions.read
-accounting.reports.read
+accounting.reports.profitandloss.read
 ```
+
+(Reports scopes are granular per-report for this app — there is no blanket
+`accounting.reports.read`; requesting it returns `invalid_scope`. P&L is the
+one report forecasting v1 needs.)
 
 Two layers enforce this: the token Xero issues is incapable of writes (scope
 boundary), and `lib/xero.ts` — the single egress point for all accounting API
