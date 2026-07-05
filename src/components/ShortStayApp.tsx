@@ -277,13 +277,14 @@ type TabKey =
   | "ledger"
   | "report"
   | "fieldreports"
-  | "approvals";
+  | "approvals"
+  | "contacts";
 
 // Which tabs each persona sees — mirrors lib/permissions capabilities.
 const ROLE_TABS: Record<Role, readonly TabKey[]> = {
   cleaner: ["report"],
-  operations: ["overview", "capture", "fieldreports", "agents"],
-  accountant: ["overview", "statements", "approvals", "reconcile", "agents", "ledger"],
+  operations: ["overview", "capture", "fieldreports", "contacts", "agents"],
+  accountant: ["overview", "statements", "approvals", "contacts", "reconcile", "agents", "ledger"],
 };
 
 /* ------------------------------------------------------- API contracts ---- */
@@ -1871,6 +1872,136 @@ function ApprovalsTab({ onLedgerChange }: { onLedgerChange: () => void }) {
   );
 }
 
+/* ---- contacts tab (live Xero) ---- */
+function ContactsTab({ onMessage }: { onMessage: (name: string) => void }) {
+  const [contacts, setContacts] = useState<{ contactId: string; name: string; isSupplier: boolean }[]>([]);
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<"all" | "suppliers" | "landlords">("all");
+  React.useEffect(() => {
+    fetch("/api/xero/contacts").then((r) => r.json()).then((d) => setContacts(d.contacts ?? [])).catch(() => setContacts([]));
+  }, []);
+  const landlordNames = new Set(PROPERTIES.map((p) => LANDLORDS.find((l) => l.id === p.landlordId)?.name ?? ""));
+  const shown = contacts.filter((c) => {
+    if (q && !c.name.toLowerCase().includes(q.toLowerCase())) return false;
+    if (filter === "suppliers") return c.isSupplier;
+    if (filter === "landlords") return landlordNames.has(c.name);
+    return true;
+  });
+  return (
+    <>
+      <div className="head"><h1 className="h-title">Contacts</h1><p className="h-sub">Live from Xero — {contacts.length} contacts.</p></div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        {(["all", "suppliers", "landlords"] as const).map((f) => (
+          <button key={f} className={"chip focusable" + (filter === f ? " on" : "")} onClick={() => setFilter(f)}>{f}</button>
+        ))}
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="focusable"
+          style={{ marginLeft: "auto", border: "1px solid var(--line)", borderRadius: 20, padding: "7px 14px", fontSize: 13, fontFamily: "inherit" }} />
+      </div>
+      <div className="card">
+        <table className="led">
+          <thead><tr><th>Name</th><th>Type</th><th className="r">Actions</th></tr></thead>
+          <tbody>
+            {shown.map((c) => (
+              <tr key={c.contactId}>
+                <td>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 9 }}>
+                    <span style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--pine-soft)", color: "var(--pine)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
+                      {c.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                    </span>
+                    <span className="prop-name">{c.name}</span>
+                  </span>
+                </td>
+                <td>
+                  {landlordNames.has(c.name) ? <span className="tag read">landlord</span> : c.isSupplier ? <span className="tag draft">supplier</span> : <span className="tag src">contact</span>}
+                </td>
+                <td className="r"><button className="btn sm ghost focusable" onClick={() => onMessage(c.name)}>Message</button></td>
+              </tr>
+            ))}
+            {shown.length === 0 && <tr><td colSpan={3} className="subtle" style={{ padding: 16 }}>No matches.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* ---- messenger dock (POC — client-side threads) ---- */
+interface PocMsg { from: string; body: string; ts: string; mine: boolean }
+interface PocThread { id: string; name: string; kind: string; msgs: PocMsg[]; unread: boolean }
+const SEED_THREADS: PocThread[] = [
+  { id: "t1", name: "Amara Okafor", kind: "landlord", unread: true, msgs: [
+    { from: "Amara Okafor", body: "Hi — quick one, when does the June statement land? Mortgage payment on the 8th.", ts: "09:12", mine: false },
+    { from: "Amara Okafor", body: "Also is the Dockside plumbing invoice in there?", ts: "09:14", mine: false },
+  ]},
+  { id: "t2", name: "Priya Raman", kind: "lead", unread: true, msgs: [
+    { from: "Priya Raman", body: "Hello! Is Gasholder Studio free 21–25 August for 2 guests?", ts: "Yesterday", mine: false },
+  ]},
+  { id: "t3", name: "Tom Whitfield", kind: "teammate", unread: false, msgs: [
+    { from: "Tom Whitfield", body: "Before you approve — the plumber bill looks doubled vs the receipt. Check the capture?", ts: "Thu", mine: false },
+    { from: "me", body: "On it — re-checking against the receipt now.", ts: "Thu", mine: true },
+  ]},
+];
+
+function Dock({ popups, threads, onOpen, onClose, onMin, onReply }: {
+  popups: { id: string; minimized: boolean }[];
+  threads: PocThread[];
+  onOpen: (id: string) => void;
+  onClose: (id: string) => void;
+  onMin: (id: string) => void;
+  onReply: (id: string, body: string) => void;
+}) {
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  return (
+    <div style={{ position: "fixed", bottom: 0, right: 18, zIndex: 60, display: "flex", flexDirection: "row-reverse", alignItems: "flex-end", gap: 10 }}>
+      {popups.map((p) => {
+        const t = p.id === "inbox" ? null : threads.find((x) => x.id === p.id);
+        return (
+          <div key={p.id} style={{ width: 320, height: p.minimized ? "auto" : 400, display: "flex", flexDirection: "column", background: "var(--surface)", border: "1px solid var(--line)", borderBottom: "none", borderRadius: "12px 12px 0 0", boxShadow: "0 -2px 8px rgba(11,31,75,.08), 0 -12px 32px -12px rgba(11,31,75,.28)", overflow: "hidden" }}>
+            <div onClick={() => onMin(p.id)} style={{ background: "var(--ink)", color: "#fff", fontWeight: 600, fontSize: 13, padding: "9px 10px 9px 14px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t ? t.name : "Messages"}</span>
+              <button onClick={(e) => { e.stopPropagation(); onMin(p.id); }} className="focusable" style={{ background: "none", border: "none", color: "#AEBEDF", width: 22 }}>−</button>
+              <button onClick={(e) => { e.stopPropagation(); onClose(p.id); }} className="focusable" style={{ background: "none", border: "none", color: "#AEBEDF", width: 22 }}>×</button>
+            </div>
+            {!p.minimized && (t ? (
+              <>
+                <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px", background: "#FBFCFE" }}>
+                  {t.msgs.map((m, i) => (
+                    <div key={i} style={{ maxWidth: "82%", padding: "8px 11px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, marginBottom: 8, ...(m.mine ? { background: "var(--pine2)", color: "#fff", marginLeft: "auto", borderBottomRightRadius: 4 } : { background: "var(--sand)", borderBottomLeftRadius: 4 }) }}>
+                      {m.body}
+                      <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 10, opacity: 0.65, marginTop: 3 }}>{m.ts}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ borderTop: "1px solid var(--line)", padding: 9, display: "flex", gap: 7, background: "var(--surface)" }}>
+                  <input value={draft[t.id] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [t.id]: e.target.value }))} placeholder="Reply…" className="focusable"
+                    onKeyDown={(e) => { if (e.key === "Enter" && (draft[t.id] ?? "").trim()) { onReply(t.id, draft[t.id]); setDraft((d) => ({ ...d, [t.id]: "" })); } }}
+                    style={{ flex: 1, border: "1px solid var(--line)", borderRadius: 9, padding: "8px 11px", fontSize: 13, fontFamily: "inherit" }} />
+                  <button className="btn sm focusable" disabled={!(draft[t.id] ?? "").trim()} onClick={() => { onReply(t.id, draft[t.id]); setDraft((d) => ({ ...d, [t.id]: "" })); }}>Send</button>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, overflowY: "auto", background: "#FBFCFE" }}>
+                {threads.map((th) => (
+                  <button key={th.id} onClick={() => onOpen(th.id)} className="focusable" style={{ display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid #EDF1F8", padding: "11px 12px", cursor: "pointer" }}>
+                    <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--pine-soft)", color: "var(--pine)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11.5, fontWeight: 700, flex: "0 0 30px" }}>
+                      {th.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontWeight: 600, fontSize: 13, color: "var(--ink)" }}>{th.name} <span className="tag src" style={{ marginLeft: 4 }}>{th.kind}</span></span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{th.msgs.at(-1)?.body}</span>
+                    </span>
+                    {th.unread && <span className="pip">•</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ================================================================= app ==== */
 export default function ShortStayApp({ userName, role }: { userName: string; role: Role }) {
   const [tab, setTab] = useState<TabKey>(role === "cleaner" ? "report" : "overview");
@@ -1905,6 +2036,30 @@ export default function ShortStayApp({ userName, role }: { userName: string; rol
 
   const hasDraftedBill = auditEvents.some((e) => e.eventType === "bill.drafted");
 
+  // Messenger POC — client-side threads + Gmail-style dock.
+  const [threads, setThreads] = useState<PocThread[]>(SEED_THREADS);
+  const [popups, setPopups] = useState<{ id: string; minimized: boolean }[]>([]);
+  const openPopup = (id: string) =>
+    setPopups((ps) => {
+      if (ps.some((p) => p.id === id)) return ps.map((p) => (p.id === id ? { ...p, minimized: false } : p));
+      const next = [{ id, minimized: false }, ...ps];
+      return next.slice(0, 3); // POC cap: 3 windows
+    });
+  const openThread = (id: string) => {
+    setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, unread: false } : t)));
+    openPopup(id);
+  };
+  const openMessageTo = (name: string) => {
+    const existing = threads.find((t) => t.name === name);
+    if (existing) { openThread(existing.id); return; }
+    const id = `t-${name.toLowerCase().replace(/\W+/g, "-")}`;
+    setThreads((ts) => [{ id, name, kind: "contact", unread: false, msgs: [] }, ...ts]);
+    openPopup(id);
+  };
+  const reply = (id: string, body: string) =>
+    setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, msgs: [...t.msgs, { from: "me", body, ts: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }), mine: true }] } : t)));
+  const unreadCount = threads.filter((t) => t.unread).length;
+
   const NAV_ALL: [TabKey, string, React.ReactElement, number?][] = [
     ["overview", "Overview", I.overview],
     ["report", "Report an issue", I.capture],
@@ -1936,6 +2091,12 @@ export default function ShortStayApp({ userName, role }: { userName: string; rol
               {pip && tab !== "capture" && !hasDraftedBill && k === "capture" && <span className="pip">1</span>}
             </button>
           ))}
+          {role !== "cleaner" && (
+            <button className="nav-b focusable" onClick={() => openPopup("inbox")}>
+              <Ico d={<path d="M4 5h16v11H8l-4 4z" />} cls="ico" /> Messages
+              {unreadCount > 0 && <span className="pip">{unreadCount}</span>}
+            </button>
+          )}
         </nav>
         <div className="side-spacer" />
         <div className="seal" style={{ marginBottom: 10 }}>
@@ -1974,10 +2135,22 @@ export default function ShortStayApp({ userName, role }: { userName: string; rol
         {tab === "capture" && <Capture audit={auditEvents} xeroConnected={!!xero?.connected} onLedgerChange={() => void refresh()} />}
         {tab === "statements" && <Statements statements={statements} onRefresh={() => void refresh()} />}
         {tab === "approvals" && <ApprovalsTab onLedgerChange={() => void refresh()} />}
+        {tab === "contacts" && <ContactsTab onMessage={openMessageTo} />}
         {tab === "reconcile" && <Reconcile onLedgerChange={() => void refresh()} />}
         {tab === "agents" && <Agents />}
         {tab === "ledger" && <Ledger audit={auditEvents} xero={xero} />}
       </main>
+
+      {role !== "cleaner" && (
+        <Dock
+          popups={popups}
+          threads={threads}
+          onOpen={openThread}
+          onClose={(id) => setPopups((ps) => ps.filter((p) => p.id !== id))}
+          onMin={(id) => setPopups((ps) => ps.map((p) => (p.id === id ? { ...p, minimized: !p.minimized } : p)))}
+          onReply={reply}
+        />
+      )}
     </div>
   );
 }
