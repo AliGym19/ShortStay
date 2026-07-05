@@ -185,12 +185,6 @@ interface Account { code: string; name: string }
 interface Landlord { id: string; name: string; contactId: string; ref: string }
 interface Property { id: string; name: string; area: string; landlordId: string; commission: number; fee: number }
 interface Booking { id: string; propertyId: string; guest: string; nights: number; gross: number; checkIn: string }
-interface Cost { id: string; propertyId: string; desc: string; code: string; gross: number; date: string; supplier: string }
-interface AuditEvt {
-  id: string; ts: string; eventType: string; actor: string;
-  subjectType: string; subjectId: string; parentEventId: string | null; payload: string;
-}
-type AuditEvtInput = Omit<AuditEvt, "id" | "ts">;
 interface CodedReceipt {
   supplier: string; date: string; grossInclVat: number; vatRate?: number;
   accountCode: string; propertyId: string; confidence?: number; note?: string;
@@ -201,15 +195,94 @@ interface CodedFields {
   code: string; accName: string; propId: string; propName: string;
   confidence: number; note?: string;
 }
-interface PropStatement {
-  p: Property; gross: number; commission: number; fee: number;
-  costTotal: number; owed: number; costs: Cost[];
-}
-interface Statement {
-  props: PropStatement[]; gross: number; commission: number;
-  fee: number; costTotal: number; owed: number;
-}
 type TabKey = "overview" | "capture" | "statements" | "reconcile" | "ledger";
+
+/* ------------------------------------------------------- API contracts ---- */
+interface ApiStatementLine {
+  kind: "revenue" | "commission" | "fee" | "cost" | "owed";
+  propertyId: string;
+  description: string;
+  amountPence: number;
+  sourceType: string;
+  sourceId: string;
+  billStatus?: string;
+  date?: string;
+}
+interface ApiStatementTotals {
+  grossPence: number;
+  commissionPence: number;
+  feePence: number;
+  costsPence: number;
+  owedPence: number;
+}
+interface ApiStatement {
+  statementId: string;
+  landlordId: string;
+  landlordName: string;
+  month: string;
+  status: string;
+  lines: ApiStatementLine[];
+  totals: ApiStatementTotals;
+  xeroConnected: boolean;
+}
+interface ApiGuardResult {
+  name: string;
+  decision: "allow" | "pause" | "escalate";
+  reason: string;
+}
+interface ApiApproveResponse {
+  approved: boolean;
+  moved: boolean;
+  status: string;
+  decision?: string;
+  guards: ApiGuardResult[];
+  note?: string;
+  approvedEventId?: string;
+}
+interface ApiAuditEvent {
+  id: string;
+  eventType: string;
+  actor: string;
+  subjectType: string;
+  subjectId: string;
+  payload: unknown;
+  parentEventId: string | null;
+  createdAt: string;
+}
+interface ApiDraftBillResult {
+  ok: boolean;
+  invoiceId?: string;
+  needsContact?: boolean;
+  warning?: string;
+  error?: string;
+  auditEventId?: string;
+}
+
+const LANDLORD_IDS = ["L1", "L2"] as const;
+const penceToMoney = (p: number) => money(p / 100);
+
+const fmtTs = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+function summarisePayload(e: ApiAuditEvent): string {
+  const p = e.payload as Record<string, unknown> | null;
+  if (!p || typeof p !== "object") return "";
+  if (typeof p.supplier === "string" && typeof p.grossInclVat === "number") {
+    return `${p.supplier} · ${money(p.grossInclVat)}${p.accountCode ? ` → ${p.accountCode}` : ""}`;
+  }
+  if (typeof p.preview === "string") return p.preview.split("\n")[0];
+  if (p.totals && typeof p.totals === "object") {
+    const t = p.totals as { owedPence?: number };
+    return typeof t.owedPence === "number" ? `owed ${penceToMoney(t.owedPence)}` : "totals recorded";
+  }
+  if (typeof p.decision === "string") return `decision: ${p.decision}`;
+  if (typeof p.name === "string" && typeof p.version === "number") {
+    return `${p.name}@v${p.version}`;
+  }
+  if (typeof p.note === "string") return p.note;
+  const s = JSON.stringify(p);
+  return s.length > 80 ? s.slice(0, 77) + "…" : s;
+}
 
 /* ---------------------------------------------------------------- data ----- */
 const GBP = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", minimumFractionDigits: 2 });
@@ -228,8 +301,6 @@ const LANDLORDS: Landlord[] = [
   { id: "L1", name: "Amara Okafor", contactId: "c-8f21", ref: "LL-AMARA" },
   { id: "L2", name: "The Whitfield Trust", contactId: "c-3b90", ref: "LL-WHITF" },
 ];
-const landlordById = (id: string): Landlord => LANDLORDS.find((l) => l.id === id) || LANDLORDS[0];
-
 const PROPERTIES: Property[] = [
   { id: "P1", name: "Dockside Loft", area: "Wapping", landlordId: "L1", commission: 0.15, fee: 0.12 },
   { id: "P2", name: "Gasholder Studio", area: "King's Cross", landlordId: "L1", commission: 0.15, fee: 0.12 },
@@ -251,18 +322,6 @@ const BOOKINGS: Booking[] = [
   { id: "bk-268", propertyId: "P3", guest: "A. Serrano", nights: 3, gross: 740, checkIn: "2026-06-14" },
   { id: "bk-274", propertyId: "P3", guest: "V. Ilić", nights: 2, gross: 700, checkIn: "2026-06-20" },
   { id: "bk-280", propertyId: "P3", guest: "N. Palmer", nights: 2, gross: 480, checkIn: "2026-06-25" },
-];
-
-// coded costs already drafted as ACCPAY bills (the seeded ledger)
-const SEED_COSTS: Cost[] = [
-  { id: "bill-401", propertyId: "P1", desc: "Changeover clean", code: "408", gross: 85, date: "2026-06-02", supplier: "Sparkle Turnarounds" },
-  { id: "bill-402", propertyId: "P1", desc: "Changeover clean", code: "408", gross: 85, date: "2026-06-16", supplier: "Sparkle Turnarounds" },
-  { id: "bill-403", propertyId: "P1", desc: "Linen restock", code: "429", gross: 120, date: "2026-06-09", supplier: "The Linen Rooms" },
-  { id: "bill-411", propertyId: "P2", desc: "Changeover clean", code: "408", gross: 85, date: "2026-06-05", supplier: "Sparkle Turnarounds" },
-  { id: "bill-412", propertyId: "P2", desc: "Changeover clean", code: "408", gross: 85, date: "2026-06-21", supplier: "Sparkle Turnarounds" },
-  { id: "bill-413", propertyId: "P2", desc: "Welcome pack restock", code: "429", gross: 48, date: "2026-06-12", supplier: "Corner Provisions" },
-  { id: "bill-421", propertyId: "P3", desc: "Changeover clean", code: "408", gross: 90, date: "2026-06-07", supplier: "BrightKey Cleaning" },
-  { id: "bill-422", propertyId: "P3", desc: "Emergency locksmith callout", code: "473", gross: 150, date: "2026-06-19", supplier: "CityLock 24/7" },
 ];
 
 // the receipt sitting in the inbox, waiting to be coded live
@@ -332,47 +391,6 @@ const Mark = () => (
 /* ---------------------------------------------------------- calc helpers -- */
 function vatOf(grossInclVat: number, rate = 0.2) { return round2(grossInclVat - grossInclVat / (1 + rate)); }
 
-function useLedger() {
-  const [costs, setCosts] = useState<Cost[]>(SEED_COSTS);
-  const [audit, setAudit] = useState<AuditEvt[]>(() => {
-    const base: AuditEvt[] = [];
-    let n = 0;
-    const mk = (o: AuditEvtInput & { ts: string }): AuditEvt => ({ id: "evt_" + (1000 + n++).toString(36), ...o });
-    BOOKINGS.forEach((b) =>
-      base.push(mk({ eventType: "booking.recorded", actor: "sync:booking.com", subjectType: "bank.receive",
-        subjectId: b.id, parentEventId: null, ts: "06:00", payload: `${b.guest} · ${money(b.gross)}` }))
-    );
-    SEED_COSTS.forEach((c) =>
-      base.push(mk({ eventType: "bill.drafted", actor: "agent:receipt-coder", subjectType: "xero.invoice",
-        subjectId: c.id, parentEventId: null, ts: "06:02", payload: `${c.supplier} · ${money(c.gross)} → ${c.code}` }))
-    );
-    return base;
-  });
-  const append = (e: AuditEvtInput): AuditEvt => {
-    const id = "evt_" + Math.random().toString(36).slice(2, 6);
-    const evt: AuditEvt = { id, ts: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }), ...e };
-    setAudit((a) => [...a, evt]);
-    return evt;
-  };
-  return { costs, setCosts, audit, append };
-}
-
-function landlordStatement(landlordId: string, costs: Cost[]): Statement {
-  const props = PROPERTIES.filter((p) => p.landlordId === landlordId);
-  const perProp: PropStatement[] = props.map((p) => {
-    const gross = round2(BOOKINGS.filter((b) => b.propertyId === p.id).reduce((s, b) => s + b.gross, 0));
-    const commission = round2(gross * p.commission);
-    const fee = round2(gross * p.fee);
-    const propCosts = costs.filter((c) => c.propertyId === p.id);
-    const costTotal = round2(propCosts.reduce((s, c) => s + c.gross, 0));
-    const owed = round2(gross - commission - fee - costTotal);
-    return { p, gross, commission, fee, costTotal, owed, costs: propCosts };
-  });
-  const t = (k: "gross" | "commission" | "fee" | "costTotal" | "owed") =>
-    round2(perProp.reduce((s, x) => s + x[k], 0));
-  return { props: perProp, gross: t("gross"), commission: t("commission"), fee: t("fee"), costTotal: t("costTotal"), owed: t("owed") };
-}
-
 /* =========================================================== LLM coding === */
 // Server-side coding through ShortStay's own API (never a direct browser call
 // to the model provider). Falls back to the offline matcher on any failure.
@@ -419,11 +437,37 @@ function KPI({ lab, big, foot, color, icon }: {
   );
 }
 
-function Overview({ costs, go }: { costs: Cost[]; go: (t: TabKey) => void }) {
-  const stmts = LANDLORDS.map((l) => ({ l, s: landlordStatement(l.id, costs) }));
-  const owed = round2(stmts.reduce((s, x) => s + x.s.owed, 0));
-  const earned = round2(stmts.reduce((s, x) => s + x.s.fee, 0));
-  const gross = round2(stmts.reduce((s, x) => s + x.s.gross, 0));
+function Overview({ statements, go }: {
+  statements: Record<string, ApiStatement | undefined>;
+  go: (t: TabKey) => void;
+}) {
+  const loaded = LANDLORD_IDS.map((id) => statements[id]).filter(
+    (s): s is ApiStatement => !!s
+  );
+  const owed = penceToMoney(loaded.reduce((s, x) => s + x.totals.owedPence, 0));
+  const earned = penceToMoney(loaded.reduce((s, x) => s + x.totals.feePence, 0));
+  const gross = penceToMoney(loaded.reduce((s, x) => s + x.totals.grossPence, 0));
+  const pending = loaded.filter((s) => s.status !== "approved").length;
+
+  const rows = loaded.flatMap((s) => {
+    const ids = Array.from(new Set(s.lines.map((l) => l.propertyId)));
+    return ids.map((pid) => {
+      const lines = s.lines.filter((l) => l.propertyId === pid);
+      const sum = (kind: ApiStatementLine["kind"]) =>
+        lines.filter((l) => l.kind === kind).reduce((t, l) => t + l.amountPence, 0);
+      const revenue = sum("revenue");
+      const commission = sum("commission");
+      const fee = sum("fee");
+      const costTotal = sum("cost");
+      return {
+        p: propById(pid),
+        landlordName: s.landlordName,
+        revenue, commission, fee, costTotal,
+        owed: revenue - commission - fee - costTotal,
+      };
+    });
+  });
+
   return (
     <>
       <div className="head">
@@ -433,18 +477,18 @@ function Overview({ costs, go }: { costs: Cost[]; go: (t: TabKey) => void }) {
       </div>
 
       <div className="grid3" style={{ marginBottom: 16 }}>
-        <KPI lab="Owed to landlords" big={money(owed)} foot="Across 2 landlords · awaiting your approval" color="var(--pine)"
+        <KPI lab="Owed to landlords" big={owed} foot={`Across ${loaded.length || "…"} landlords · awaiting your approval`} color="var(--pine)"
           icon={<Ico d={<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />} cls="ico" />} />
-        <KPI lab="Agency earned" big={money(earned)} foot="Management fee, 12% of gross bookings" color="var(--teal)"
+        <KPI lab="Agency earned" big={earned} foot="Management fee, 12% of gross bookings" color="var(--teal)"
           icon={<Ico d={<path d="M3 3v18h18M7 15l4-4 3 3 5-6" />} cls="ico" />} />
-        <KPI lab="Held for approval" big="2" foot={`${money(owed)} in statements · 1 receipt to code`} color="var(--amber)"
+        <KPI lab="Held for approval" big={String(pending)} foot={`${owed} in statements · live from the gate`} color="var(--amber)"
           icon={<Ico d={<path d="M12 8v5M12 16h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />} cls="ico" />} />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="pad" style={{ paddingBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div className="sect-t"><Ico d={I.overview} cls="ico" /> Properties this month</div>
-          <div className="subtle">gross booked {money(gross)} · Booking.com</div>
+          <div className="subtle">gross booked {gross} · Booking.com</div>
         </div>
         <table className="led">
           <thead><tr>
@@ -452,21 +496,20 @@ function Overview({ costs, go }: { costs: Cost[]; go: (t: TabKey) => void }) {
             <th className="r">Commission</th><th className="r">Agency fee</th><th className="r">Costs</th><th className="r">Owed</th>
           </tr></thead>
           <tbody>
-            {PROPERTIES.map((p) => {
-              const st = landlordStatement(p.landlordId, costs).props.find((x) => x.p.id === p.id);
-              if (!st) return null;
-              return (
-                <tr key={p.id}>
-                  <td><span className="prop-name">{p.name}</span> <span className="subtle">· {p.area}</span></td>
-                  <td className="subtle">{landlordById(p.landlordId).name}</td>
-                  <td className="r num">{money(st.gross)}</td>
-                  <td className="r num" style={{ color: "var(--amber)" }}>−{money(st.commission)}</td>
-                  <td className="r num" style={{ color: "var(--teal)" }}>−{money(st.fee)}</td>
-                  <td className="r num" style={{ color: "var(--clay)" }}>−{money(st.costTotal)}</td>
-                  <td className="r num" style={{ fontWeight: 700, color: "var(--ink)" }}>{money(st.owed)}</td>
-                </tr>
-              );
-            })}
+            {rows.length === 0 && (
+              <tr><td colSpan={7} className="subtle" style={{ padding: 18 }}>Assembling statements from live sources…</td></tr>
+            )}
+            {rows.map(({ p, landlordName, revenue, commission, fee, costTotal, owed: propOwed }) => (
+              <tr key={p.id}>
+                <td><span className="prop-name">{p.name}</span> <span className="subtle">· {p.area}</span></td>
+                <td className="subtle">{landlordName}</td>
+                <td className="r num">{penceToMoney(revenue)}</td>
+                <td className="r num" style={{ color: "var(--amber)" }}>−{penceToMoney(commission)}</td>
+                <td className="r num" style={{ color: "var(--teal)" }}>−{penceToMoney(fee)}</td>
+                <td className="r num" style={{ color: "var(--clay)" }}>−{penceToMoney(costTotal)}</td>
+                <td className="r num" style={{ fontWeight: 700, color: "var(--ink)" }}>{penceToMoney(propOwed)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -478,26 +521,31 @@ function Overview({ costs, go }: { costs: Cost[]; go: (t: TabKey) => void }) {
   );
 }
 
-type CaptureState = "idle" | "coding" | "coded" | "drafted";
+type CaptureState = "idle" | "coding" | "coded" | "drafting" | "drafted";
 
-function Capture({ onDraft, audit }: { onDraft: (f: CodedFields) => Cost; audit: AuditEvt[] }) {
+function Capture({ audit, onLedgerChange }: { audit: ApiAuditEvent[]; onLedgerChange: () => void }) {
   const [text, setText] = useState(INBOX_RECEIPTS.plumbing);
   const [state, setState] = useState<CaptureState>("idle");
   const [fields, setFields] = useState<CodedFields | null>(null);
   const [via, setVia] = useState<string | null>(null);
-  const [drafted, setDrafted] = useState<Cost | null>(null);
+  const [drafted, setDrafted] = useState<ApiDraftBillResult | null>(null);
+  const [meta, setMeta] = useState<{ receiptId: string; codedEventId: string } | null>(null);
 
-  const load = (k: string) => { setText(INBOX_RECEIPTS[k]); setState("idle"); setFields(null); setDrafted(null); };
+  const load = (k: string) => { setText(INBOX_RECEIPTS[k]); setState("idle"); setFields(null); setDrafted(null); setMeta(null); };
 
   const run = async () => {
-    setState("coding"); setFields(null); setDrafted(null);
-    let out: CodedReceipt, source = "Claude · receipt-coder";
+    setState("coding"); setFields(null); setDrafted(null); setMeta(null);
+    let out: CodedReceipt & { receiptId?: string; codedEventId?: string };
+    let source = "Claude · receipt-coder";
     try {
       out = await codeReceiptLLM(text);
       if (!out || typeof out.grossInclVat !== "number") throw new Error("shape");
       if (out.via === "fallback") source = "offline matcher (fallback)";
+      if (out.receiptId && out.codedEventId) {
+        setMeta({ receiptId: out.receiptId, codedEventId: out.codedEventId });
+      }
     } catch {
-      out = codeReceiptFallback(text); source = "offline matcher (fallback)";
+      out = codeReceiptFallback(text); source = "offline matcher (browser fallback)";
     }
     const acc = accByCode(String(out.accountCode));
     const prop = propById(out.propertyId);
@@ -507,13 +555,39 @@ function Capture({ onDraft, audit }: { onDraft: (f: CodedFields) => Cost; audit:
       confidence: out.confidence ?? 0.8, note: out.note });
     setVia(source);
     setState("coded");
+    onLedgerChange();
   };
 
-  const draft = () => {
+  // The ONE write — through ShortStay's API, never from the browser to Xero.
+  const draft = async () => {
     if (!fields) return;
-    const bill = onDraft(fields);
-    setDrafted(bill);
+    setState("drafting");
+    try {
+      const res = await fetch("/api/draft-bill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coded: {
+            supplier: fields.supplier,
+            date: fields.date,
+            grossInclVat: fields.gross,
+            vatRate: 0.2,
+            accountCode: fields.code,
+            propertyId: fields.propId,
+            confidence: fields.confidence,
+            note: fields.note,
+          },
+          receiptId: meta?.receiptId,
+          codedEventId: meta?.codedEventId,
+        }),
+      });
+      const result = (await res.json()) as ApiDraftBillResult;
+      setDrafted(result);
+    } catch (err) {
+      setDrafted({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
     setState("drafted");
+    onLedgerChange();
   };
 
   return (
@@ -569,11 +643,19 @@ function Capture({ onDraft, audit }: { onDraft: (f: CodedFields) => Cost; audit:
                 <span className="tag draft">Xero · ACCPAY · DRAFT</span>
                 <span className="subtle" style={{ fontSize: 12 }}>confidence {(fields.confidence * 100).toFixed(0)}%</span>
                 {state === "coded" && <button className="btn sm focusable" style={{ marginLeft: "auto" }} onClick={draft}>Create draft bill in Xero →</button>}
+                {state === "drafting" && <span className="subtle" style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}><span className="spinner dk" /> Writing draft…</span>}
               </div>
 
-              {state === "drafted" && drafted && (
+              {state === "drafted" && drafted?.ok && (
                 <div className="callout" style={{ marginTop: 16 }}>
-                  <b>Draft bill {drafted.id} created</b> — coded {money(drafted.gross)} to {drafted.code} for {propById(drafted.propertyId).name}. It sits in Xero&apos;s <b>Draft</b> tab for a human to approve. It&apos;s now on {landlordById(propById(drafted.propertyId).landlordId).name}&apos;s statement.
+                  <b>Draft bill created in Xero</b> — <span className="mono" style={{ fontSize: 12 }}>{drafted.invoiceId}</span>, coded {money(fields.gross)} to {fields.code} for {fields.propName}. Read back and verified <b>DRAFT</b> — it waits in Xero for a human to approve.{" "}
+                  <a className="focusable" style={{ fontWeight: 600, textDecoration: "underline" }} href={`https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${drafted.invoiceId}`} target="_blank" rel="noreferrer">View in Xero →</a>
+                  {drafted.warning && <div className="subtle" style={{ marginTop: 8, fontSize: 12 }}>⚠ {drafted.warning}</div>}
+                </div>
+              )}
+              {state === "drafted" && drafted && !drafted.ok && (
+                <div className="callout" style={{ marginTop: 16, background: "var(--clay-soft)", borderColor: "var(--clay)" }}>
+                  <b>{drafted.needsContact ? "Contact needed" : "Draft not written"}</b> — {drafted.error}
                 </div>
               )}
             </div>
@@ -583,11 +665,11 @@ function Capture({ onDraft, audit }: { onDraft: (f: CodedFields) => Cost; audit:
 
       <div style={{ marginTop: 16 }} className="card pad">
         <div className="sect-t" style={{ marginBottom: 8 }}><Ico d={I.ledger} cls="ico" /> What just got written to the audit log</div>
-        {audit.slice(-2).reverse().map((e) => (
+        {audit.slice(-3).reverse().map((e) => (
           <div className="evt" key={e.id} style={{ gridTemplateColumns: "150px 1fr auto" }}>
             <span className="et">{e.eventType}</span>
-            <span><span className="em">{e.payload}</span><div className="emeta">{e.actor} · {e.subjectId}{e.parentEventId ? ` ← ${e.parentEventId}` : ""}</div></span>
-            <span className="ets">{e.ts}</span>
+            <span><span className="em">{summarisePayload(e)}</span><div className="emeta">{e.actor} · {e.subjectType}:{e.subjectId.slice(0, 12)}{e.parentEventId ? ` ← ${e.parentEventId.slice(0, 8)}` : ""}</div></span>
+            <span className="ets">{fmtTs(e.createdAt)}</span>
           </div>
         ))}
         <p className="subtle" style={{ marginTop: 10, fontSize: 12.5 }}>No <span className="mono">payment.*</span> event exists in the vocabulary — coding a cost can never become paying one.</p>
@@ -596,67 +678,99 @@ function Capture({ onDraft, audit }: { onDraft: (f: CodedFields) => Cost; audit:
   );
 }
 
-function Bridge({ st }: { st: Statement }) {
+function Bridge({ totals }: { totals: ApiStatementTotals }) {
   const segs = [
-    { k: "owed", v: st.owed, c: "var(--pine)", lab: "Owed to landlord" },
-    { k: "commission", v: st.commission, c: "var(--amber)", lab: "Booking.com commission" },
-    { k: "fee", v: st.fee, c: "var(--teal)", lab: "Agency fee" },
-    { k: "costTotal", v: st.costTotal, c: "var(--clay)", lab: "Property costs" },
+    { k: "owed", v: totals.owedPence, c: "var(--pine)", lab: "Owed to landlord" },
+    { k: "commission", v: totals.commissionPence, c: "var(--amber)", lab: "Booking.com commission" },
+    { k: "fee", v: totals.feePence, c: "var(--teal)", lab: "Agency fee" },
+    { k: "costs", v: totals.costsPence, c: "var(--clay)", lab: "Property costs" },
   ];
+  const gross = totals.grossPence || 1;
   return (
     <div>
       <div className="bridge-track">
         {segs.map((s) => (
-          <div key={s.k} className="bridge-seg" style={{ flexBasis: `${(s.v / st.gross) * 100}%`, background: s.c }} title={`${s.lab}: ${money(s.v)}`}>
-            {(s.v / st.gross) > 0.12 && <span>{money(s.v)}</span>}
+          <div key={s.k} className="bridge-seg" style={{ flexBasis: `${(s.v / gross) * 100}%`, background: s.c }} title={`${s.lab}: ${penceToMoney(s.v)}`}>
+            {(s.v / gross) > 0.12 && <span>{penceToMoney(s.v)}</span>}
           </div>
         ))}
       </div>
       <div className="legend">
-        {[{ c: "var(--pine)", l: "Owed to landlord", v: st.owed, big: true },
-          { c: "var(--amber)", l: "− Booking.com 15%", v: st.commission, big: false },
-          { c: "var(--teal)", l: "− Agency fee 12%", v: st.fee, big: false },
-          { c: "var(--clay)", l: "− Property costs", v: st.costTotal, big: false }].map((x) => (
+        {[{ c: "var(--pine)", l: "Owed to landlord", v: totals.owedPence, big: true },
+          { c: "var(--amber)", l: "− Booking.com 15%", v: totals.commissionPence, big: false },
+          { c: "var(--teal)", l: "− Agency fee 12%", v: totals.feePence, big: false },
+          { c: "var(--clay)", l: "− Property costs", v: totals.costsPence, big: false }].map((x) => (
           <div className="leg" key={x.l}>
             <span className="sw" style={{ background: x.c }} />
-            <span className="lv" style={x.big ? { fontSize: 14 } : {}}>{money(x.v)}</span>
+            <span className="lv" style={x.big ? { fontSize: 14 } : {}}>{penceToMoney(x.v)}</span>
             <span className="ll">{x.l}</span>
           </div>
         ))}
         <div className="leg" style={{ marginLeft: "auto" }}>
-          <span className="ll">of</span><span className="lv">{money(st.gross)}</span><span className="ll">gross booked</span>
+          <span className="ll">of</span><span className="lv">{penceToMoney(totals.grossPence)}</span><span className="ll">gross booked</span>
         </div>
       </div>
     </div>
   );
 }
 
-type GuardDecision = "allow" | "pause" | "escalate";
-
-function Statements({ costs, approvals, onApprove, append }: {
-  costs: Cost[];
-  approvals: Record<string, string>;
-  onApprove: (lid: string, guardEvtId: string) => void;
-  append: (e: AuditEvtInput) => AuditEvt;
+function Statements({ statements, onRefresh }: {
+  statements: Record<string, ApiStatement | undefined>;
+  onRefresh: () => void;
 }) {
-  const [lid, setLid] = useState("L1");
-  const landlord = landlordById(lid);
-  const st = useMemo(() => landlordStatement(lid, costs), [lid, costs]);
-  const status = approvals[lid] || "assembled";
+  const [lid, setLid] = useState<string>("L1");
+  const [gate, setGate] = useState<Record<string, ApiApproveResponse | undefined>>({});
+  const st = statements[lid];
+  const gateResult = gate[lid];
+  const status = gateResult?.status ?? st?.status ?? "assembled";
 
-  // guardrails
-  const uncoded = false; // inbox is coded via Capture; completeness holds here
-  const guards: { name: string; decision: GuardDecision; reason: string }[] = [
-    { name: "no-money-movement", decision: "allow", reason: "approval flags for release; no Payment or transfer is issued" },
-    { name: "statement-completeness", decision: uncoded ? "pause" : "allow", reason: uncoded ? "uncoded receipts remain" : "every line traces to a Xero source" },
+  // Server-side guards are the truth; before the first approve attempt we
+  // show what will be evaluated, not a pre-judged verdict.
+  const guards: ApiGuardResult[] = gateResult?.guards ?? [
+    { name: "no-money-movement", decision: "allow", reason: "evaluated server-side on approval" },
+    { name: "statement-completeness", decision: "allow", reason: "evaluated server-side on approval" },
   ];
-  const strict: GuardDecision = guards.some((g) => g.decision === "escalate") ? "escalate" : guards.some((g) => g.decision === "pause") ? "pause" : "allow";
 
-  const approve = () => {
-    const g = append({ eventType: "guard.evaluated", actor: "guardrails", subjectType: "statement",
-      subjectId: `stmt-${lid}`, parentEventId: null, payload: `combine → ${strict} · no-money-movement=allow` });
-    onApprove(lid, g.id);
+  const approve = async () => {
+    try {
+      const res = await fetch(`/api/statements/${lid}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionKind: "approve-statement" }),
+      });
+      const data = (await res.json()) as ApiApproveResponse;
+      setGate((g) => ({ ...g, [lid]: data }));
+    } catch {
+      // surfaced by the unchanged "assembled" status
+    }
+    onRefresh();
   };
+
+  // Group API lines per property for the detail tables.
+  const perProp = useMemo(() => {
+    if (!st) return [];
+    const ids = Array.from(new Set(st.lines.map((l) => l.propertyId)));
+    return ids.map((pid) => {
+      const lines = st.lines.filter((l) => l.propertyId === pid);
+      const sum = (kind: ApiStatementLine["kind"]) =>
+        lines.filter((l) => l.kind === kind).reduce((s, l) => s + l.amountPence, 0);
+      const revenue = sum("revenue");
+      const commission = sum("commission");
+      const fee = sum("fee");
+      const costTotal = sum("cost");
+      return {
+        p: propById(pid),
+        lines,
+        revenue,
+        commission,
+        fee,
+        costTotal,
+        owed: revenue - commission - fee - costTotal,
+        stays: lines.filter((l) => l.kind === "revenue").length,
+        costs: lines.filter((l) => l.kind === "cost"),
+      };
+    });
+  }, [st]);
 
   return (
     <>
@@ -670,62 +784,72 @@ function Statements({ costs, approvals, onApprove, append }: {
         {LANDLORDS.map((l) => (
           <button key={l.id} className={"chip focusable" + (lid === l.id ? " on" : "")} onClick={() => setLid(l.id)}>{l.name}</button>
         ))}
-        <span className="chip" style={{ marginLeft: "auto", cursor: "default" }}>June 2026</span>
+        <span className="chip" style={{ marginLeft: "auto", cursor: "default" }}>{st?.month ?? "June 2026"}</span>
       </div>
 
-      <div className="card pad" style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div className="disp" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.02em" }}>{landlord.name}</div>
-            <div className="subtle" style={{ marginTop: 3 }}>{st.props.length} propert{st.props.length > 1 ? "ies" : "y"} · contact <span className="mono" style={{ fontSize: 12 }}>{landlord.contactId}</span></div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="subtle" style={{ fontSize: 12 }}>Owed to landlord</div>
-            <div className="num" style={{ fontSize: 30, fontWeight: 700, color: "var(--pine)", letterSpacing: "-.03em" }}>{money(st.owed)}</div>
-          </div>
+      {!st && (
+        <div className="card pad subtle" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <span className="spinner dk" /> Assembling from live sources…
         </div>
-        <Bridge st={st} />
-      </div>
+      )}
 
-      {st.props.map(({ p, gross, commission, fee, costTotal, owed, costs: pc }) => (
-        <div className="card" key={p.id} style={{ marginBottom: 14 }}>
-          <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <div className="sect-t">{p.name} <span className="subtle" style={{ fontWeight: 400 }}>· {p.area}</span></div>
-            <div className="num" style={{ fontWeight: 700 }}>{money(owed)} <span className="subtle" style={{ fontWeight: 400, fontSize: 12 }}>owed</span></div>
+      {st && (
+        <>
+          <div className="card pad" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <div className="disp" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.02em" }}>{st.landlordName}</div>
+                <div className="subtle" style={{ marginTop: 3 }}>{perProp.length} propert{perProp.length > 1 ? "ies" : "y"} · statement <span className="mono" style={{ fontSize: 12 }}>{st.statementId.slice(0, 8)}</span>{!st.xeroConnected && <span className="tag hold" style={{ marginLeft: 8 }}>Xero disconnected — costs not read</span>}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="subtle" style={{ fontSize: 12 }}>Owed to landlord</div>
+                <div className="num" style={{ fontSize: 30, fontWeight: 700, color: "var(--pine)", letterSpacing: "-.03em" }}>{penceToMoney(st.totals.owedPence)}</div>
+              </div>
+            </div>
+            <Bridge totals={st.totals} />
           </div>
-          <table className="led">
-            <tbody>
-              <tr>
-                <td><span style={{ fontWeight: 600 }}>Booking revenue</span><div className="subtle">{BOOKINGS.filter((b) => b.propertyId === p.id).length} stays</div></td>
-                <td><span className="tag src">Bank · RECEIVE</span></td>
-                <td className="r num" style={{ fontWeight: 700 }}>{money(gross)}</td>
-              </tr>
-              <tr>
-                <td>Booking.com commission <span className="subtle">15%</span></td>
-                <td><span className="tag src">channel statement</span></td>
-                <td className="r num" style={{ color: "var(--amber)" }}>−{money(commission)}</td>
-              </tr>
-              <tr>
-                <td>Agency management fee <span className="subtle">12%</span></td>
-                <td><span className="tag src">contract</span></td>
-                <td className="r num" style={{ color: "var(--teal)" }}>−{money(fee)}</td>
-              </tr>
-              {pc.map((c) => (
-                <tr key={c.id}>
-                  <td style={{ paddingLeft: 22 }}>{c.desc} <span className="subtle">· {c.supplier} · {c.date}</span></td>
-                  <td><span className="tag src">ACCPAY {c.id} · {c.code}</span></td>
-                  <td className="r num" style={{ color: "var(--clay)" }}>−{money(c.gross)}</td>
-                </tr>
-              ))}
-              <tr>
-                <td style={{ fontWeight: 700, color: "var(--ink)" }}>Owed to {landlord.name.split(" ")[0]}</td>
-                <td><span className="tag src">computed</span></td>
-                <td className="r num" style={{ fontWeight: 700, color: "var(--pine)" }}>{money(owed)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      ))}
+
+          {perProp.map(({ p, revenue, commission, fee, owed, stays, costs: pc }) => (
+            <div className="card" key={p.id} style={{ marginBottom: 14 }}>
+              <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <div className="sect-t">{p.name} <span className="subtle" style={{ fontWeight: 400 }}>· {p.area}</span></div>
+                <div className="num" style={{ fontWeight: 700 }}>{penceToMoney(owed)} <span className="subtle" style={{ fontWeight: 400, fontSize: 12 }}>owed</span></div>
+              </div>
+              <table className="led">
+                <tbody>
+                  <tr>
+                    <td><span style={{ fontWeight: 600 }}>Booking revenue</span><div className="subtle">{stays} stays</div></td>
+                    <td><span className="tag src">booking ledger</span></td>
+                    <td className="r num" style={{ fontWeight: 700 }}>{penceToMoney(revenue)}</td>
+                  </tr>
+                  <tr>
+                    <td>Booking.com commission <span className="subtle">15%</span></td>
+                    <td><span className="tag src">computed</span></td>
+                    <td className="r num" style={{ color: "var(--amber)" }}>−{penceToMoney(commission)}</td>
+                  </tr>
+                  <tr>
+                    <td>Agency management fee <span className="subtle">12%</span></td>
+                    <td><span className="tag src">computed</span></td>
+                    <td className="r num" style={{ color: "var(--teal)" }}>−{penceToMoney(fee)}</td>
+                  </tr>
+                  {pc.map((c) => (
+                    <tr key={c.sourceId + c.description}>
+                      <td style={{ paddingLeft: 22 }}>{c.description} <span className="subtle">· {c.date}</span></td>
+                      <td><span className="tag src">ACCPAY {c.sourceId.slice(0, 8)} · {c.billStatus}</span></td>
+                      <td className="r num" style={{ color: "var(--clay)" }}>−{penceToMoney(c.amountPence)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={{ fontWeight: 700, color: "var(--ink)" }}>Owed to {st.landlordName.split(" ")[0]}</td>
+                    <td><span className="tag src">computed</span></td>
+                    <td className="r num" style={{ fontWeight: 700, color: "var(--pine)" }}>{penceToMoney(owed)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </>
+      )}
 
       <div className="card" style={{ marginTop: 4 }}>
         <div className="gate-h">
@@ -735,7 +859,7 @@ function Statements({ costs, approvals, onApprove, append }: {
           </div>
           {status === "approved"
             ? <span className="tag approved" style={{ fontSize: 12.5, padding: "6px 12px" }}>✓ Approved for release · you authorised</span>
-            : <button className="btn focusable" onClick={approve} disabled={strict !== "allow"}>{strict === "allow" ? "Approve statement for release" : "Held — resolve guards"}</button>}
+            : <button className="btn focusable" onClick={approve} disabled={!st}>{status === "held" ? "Re-run guards" : "Approve statement for release"}</button>}
         </div>
         {guards.map((g) => (
           <div className="guard-line" key={g.name}>
@@ -748,6 +872,12 @@ function Statements({ costs, approvals, onApprove, append }: {
         {status === "approved" && (
           <div className="callout" style={{ margin: "4px 18px 18px" }}>
             <b>Statement approved.</b> ShortStay recorded <span className="mono">statement.approved</span> and stopped. No <span className="mono">Payment</span>, no <span className="mono">BankTransfer</span> — the payout is yours to send from Xero. The audit chain proves nothing moved.
+            {gateResult?.note && <div className="mono" style={{ marginTop: 8, fontSize: 11.5 }}>server said: “{gateResult.note}”</div>}
+          </div>
+        )}
+        {status === "held" && (
+          <div className="callout" style={{ margin: "4px 18px 18px", background: "var(--amber-soft)", borderColor: "var(--amber)" }}>
+            <b>Statement held.</b> The gate returned <span className="mono">409 · {gateResult?.decision}</span> and recorded <span className="mono">statement.held</span>. Resolve the guard reasons above and re-run — nothing is approvable until the guards allow it.
           </div>
         )}
       </div>
@@ -815,7 +945,7 @@ function Reconcile() {
   );
 }
 
-function Ledger({ audit }: { audit: AuditEvt[] }) {
+function Ledger({ audit }: { audit: ApiAuditEvent[] }) {
   const [filter, setFilter] = useState("all");
   const types = ["all", ...Array.from(new Set(audit.map((e) => e.eventType)))];
   const shown = filter === "all" ? audit : audit.filter((e) => e.eventType === filter);
@@ -865,12 +995,13 @@ function Ledger({ audit }: { audit: AuditEvt[] }) {
             <div className="evt" key={e.id}>
               <span className="et">{e.eventType}</span>
               <span>
-                <span className="em">{e.payload}</span>
-                <div className="emeta">{e.actor} · {e.subjectType}:{e.subjectId}{e.parentEventId ? `  ← ${e.parentEventId}` : ""}</div>
+                <span className="em">{summarisePayload(e)}</span>
+                <div className="emeta">{e.actor} · {e.subjectType}:{e.subjectId.slice(0, 12)}{e.parentEventId ? `  ← ${e.parentEventId.slice(0, 8)}` : ""}</div>
               </span>
-              <span className="ets">{e.ts}</span>
+              <span className="ets">{fmtTs(e.createdAt)}</span>
             </div>
           ))}
+          {list.length === 0 && <p className="subtle" style={{ padding: "18px 2px" }}>No events yet — code a receipt or assemble a statement and the log fills itself.</p>}
         </div>
         <div className="divider" />
         <div className="pad" style={{ padding: "12px 22px" }}>
@@ -884,26 +1015,33 @@ function Ledger({ audit }: { audit: AuditEvt[] }) {
 /* ================================================================= app ==== */
 export default function ShortStayApp() {
   const [tab, setTab] = useState<TabKey>("overview");
-  const { costs, setCosts, audit, append } = useLedger();
-  const [approvals, setApprovals] = useState<Record<string, string>>({});
+  const [statements, setStatements] = useState<Record<string, ApiStatement | undefined>>({});
+  const [auditEvents, setAuditEvents] = useState<ApiAuditEvent[]>([]);
 
-  const onDraft = (f: CodedFields): Cost => {
-    const bill: Cost = { id: "bill-" + Math.floor(500 + Math.random() * 400), propertyId: f.propId,
-      desc: f.accName === "Repairs & Maintenance" ? "Emergency repair" : f.accName === "Cleaning" ? "Changeover clean" : "Supplier cost",
-      code: f.code, gross: f.gross, date: f.date, supplier: f.supplier };
-    setCosts((c) => [...c, bill]);
-    const coded = append({ eventType: "receipt.coded", actor: "agent:receipt-coder", subjectType: "receipt",
-      subjectId: bill.id, parentEventId: null, payload: `${f.supplier} · ${money(f.gross)} → ${f.code} ${f.accName}` });
-    append({ eventType: "bill.drafted", actor: "agent:receipt-coder", subjectType: "xero.invoice",
-      subjectId: bill.id, parentEventId: coded.id, payload: `DRAFT ACCPAY · ${money(f.gross)} · ${propById(f.propId).name}` });
-    return bill;
-  };
+  const refresh = React.useCallback(async () => {
+    const [stmtResults, auditRes] = await Promise.all([
+      Promise.all(
+        LANDLORD_IDS.map(async (lid) => {
+          try {
+            const res = await fetch(`/api/statements/${lid}`);
+            if (!res.ok) return [lid, undefined] as const;
+            return [lid, (await res.json()) as ApiStatement] as const;
+          } catch {
+            return [lid, undefined] as const;
+          }
+        })
+      ),
+      fetch("/api/audit?limit=200").then((r) => (r.ok ? r.json() : { events: [] })).catch(() => ({ events: [] })),
+    ]);
+    setStatements(Object.fromEntries(stmtResults));
+    setAuditEvents((auditRes as { events: ApiAuditEvent[] }).events ?? []);
+  }, []);
 
-  const onApprove = (lid: string, guardEvtId: string) => {
-    setApprovals((a) => ({ ...a, [lid]: "approved" }));
-    append({ eventType: "statement.approved", actor: "user:you", subjectType: "statement",
-      subjectId: `stmt-${lid}`, parentEventId: guardEvtId, payload: `${landlordById(lid).name} · authorised for release · no funds moved` });
-  };
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const hasDraftedBill = auditEvents.some((e) => e.eventType === "bill.drafted");
 
   const nav: [TabKey, string, React.ReactElement, number?][] = [
     ["overview", "Overview", I.overview],
@@ -928,7 +1066,7 @@ export default function ShortStayApp() {
           {nav.map(([k, lab, ico, pip]) => (
             <button key={k} className={"nav-b focusable" + (tab === k ? " on" : "")} onClick={() => setTab(k)}>
               <Ico d={ico} cls="ico" /> {lab}
-              {pip && tab !== "capture" && !Object.keys(approvals).length && k === "capture" && <span className="pip">1</span>}
+              {pip && tab !== "capture" && !hasDraftedBill && k === "capture" && <span className="pip">1</span>}
             </button>
           ))}
         </nav>
@@ -940,11 +1078,11 @@ export default function ShortStayApp() {
       </aside>
 
       <main className="main">
-        {tab === "overview" && <Overview costs={costs} go={setTab} />}
-        {tab === "capture" && <Capture onDraft={onDraft} audit={audit} />}
-        {tab === "statements" && <Statements costs={costs} approvals={approvals} onApprove={onApprove} append={append} />}
+        {tab === "overview" && <Overview statements={statements} go={setTab} />}
+        {tab === "capture" && <Capture audit={auditEvents} onLedgerChange={() => void refresh()} />}
+        {tab === "statements" && <Statements statements={statements} onRefresh={() => void refresh()} />}
         {tab === "reconcile" && <Reconcile />}
-        {tab === "ledger" && <Ledger audit={audit} />}
+        {tab === "ledger" && <Ledger audit={auditEvents} />}
       </main>
     </div>
   );
