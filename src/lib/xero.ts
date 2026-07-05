@@ -25,10 +25,16 @@ const ALLOWED_GET_SEGMENTS = new Set([
   "reports",
 ]);
 
-// Never-moves-money invariant. The ONLY permitted write, ever, is
-// POST /Invoices with body Type "ACCPAY" and Status "DRAFT". The body is
+// Never-moves-money invariant. The ONLY permitted write is POST /Invoices
+// creating an unapproved document: Type ACCPAY (purchase bill) or ACCREC
+// (sales invoice, for the booking flow), Status DRAFT or SUBMITTED — the
+// two statuses Xero defines as pre-approval, journal-free states. AUTHORISED
+// (journals, payable) and everything beyond stays impossible. The body is
 // parsed here — the guard does not trust the caller's claims about it.
 // Exported so guard-test can assert every case with zero network traffic.
+const ALLOWED_INVOICE_TYPES = new Set(["ACCPAY", "ACCREC"]);
+const ALLOWED_INVOICE_STATUSES = new Set(["DRAFT", "SUBMITTED"]);
+
 export function assertPermittedXeroRequest(
   method: string,
   path: string,
@@ -41,7 +47,7 @@ export function assertPermittedXeroRequest(
   const refuse = (why: string): never => {
     throw new NeverMovesMoneyViolation(
       `Never-moves-money invariant: refusing ${m} ${path} — ${why}. ` +
-        `The only permitted Xero write is POST /Invoices with Type "ACCPAY" and Status "DRAFT".`
+        `The only permitted Xero write is POST /Invoices (ACCPAY or ACCREC) with Status DRAFT or SUBMITTED.`
     );
   };
 
@@ -55,9 +61,9 @@ export function assertPermittedXeroRequest(
     return;
   }
 
-  if (m !== "POST") refuse("only GET and the single draft-bill POST exist");
+  if (m !== "POST") refuse("only GET and the single invoice-create POST exist");
   if (segments.join("/") !== "invoices") {
-    refuse("POST is permitted to /Invoices only");
+    refuse("POST is permitted to /Invoices only — no updates, no subresources");
   }
   if (typeof body !== "string") {
     return refuse("write body must be a JSON string the guard can inspect");
@@ -68,8 +74,12 @@ export function assertPermittedXeroRequest(
   } catch {
     return refuse("write body is not valid JSON");
   }
-  if (parsed.Type !== "ACCPAY") refuse('invoice Type must be "ACCPAY"');
-  if (parsed.Status !== "DRAFT") refuse('invoice Status must be "DRAFT"');
+  if (typeof parsed.Type !== "string" || !ALLOWED_INVOICE_TYPES.has(parsed.Type)) {
+    refuse('invoice Type must be "ACCPAY" or "ACCREC"');
+  }
+  if (typeof parsed.Status !== "string" || !ALLOWED_INVOICE_STATUSES.has(parsed.Status)) {
+    refuse('invoice Status must be "DRAFT" or "SUBMITTED" — approved states are unreachable');
+  }
 }
 
 export async function xeroFetch<T>(path: string, init: RequestInit = {}): Promise<T> {

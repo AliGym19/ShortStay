@@ -1,5 +1,15 @@
 # Decisions
 
+- **2026-07-05 — Guard deliberately widened for the booking flow.** The ONE
+  write is now `POST /Invoices` with Type ∈ {ACCPAY, ACCREC} × Status ∈
+  {DRAFT, SUBMITTED} (was ACCPAY×DRAFT only). Rationale: guest bookings are
+  ACCREC sales invoices, and SUBMITTED is Xero's designed pre-approval state
+  (no journals, not payable) — both states are read-only-money. AUTHORISED
+  writes, updates (`POST /Invoices/{id}`), voids, and payments remain
+  unreachable; guard-test grew to 11 cases (ACCREC+SUBMITTED passes,
+  ACCREC+AUTHORISED throws, POST to a subresource throws). "Paid" is a state
+  ShortStay reads back from Xero (AmountPaid/Status), never causes.
+
 - **2026-07-04 (evening) — v1.0 spec reconciled against reality; architecture kept.**
   Ali's pasted hackathon spec called for Custom Connection auth, xero-node,
   Supabase Postgres, and the Anthropic SDK. All four swaps rejected after

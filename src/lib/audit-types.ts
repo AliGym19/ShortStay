@@ -25,6 +25,7 @@ export const KNOWN_EVENT_TYPES = [
   "receipt.coded",
   "bill.drafted",
   "booking.recorded",
+  "invoice.raised",
   "payout.matched",
   "statement.assembled",
   "statement.held",

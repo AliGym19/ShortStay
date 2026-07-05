@@ -31,23 +31,43 @@ const CASES: Case[] = [
       assertPermittedXeroRequest("POST", "Payments", JSON.stringify({})),
   },
   {
-    name: "POST /Invoices Type ACCREC throws",
-    expect: "throw",
+    name: "ACCREC SUBMITTED passes (booking sales invoice, pending state)",
+    expect: "pass",
     run: () =>
       assertPermittedXeroRequest(
         "POST",
         "Invoices",
-        JSON.stringify({ Type: "ACCREC", Status: "DRAFT" })
+        JSON.stringify({ Type: "ACCREC", Status: "SUBMITTED" })
       ),
   },
   {
-    name: "POST /Invoices Status AUTHORISED throws",
+    name: "ACCPAY SUBMITTED passes",
+    expect: "pass",
+    run: () =>
+      assertPermittedXeroRequest(
+        "POST",
+        "Invoices",
+        JSON.stringify({ Type: "ACCPAY", Status: "SUBMITTED" })
+      ),
+  },
+  {
+    name: "POST /Invoices Status AUTHORISED throws (either type)",
     expect: "throw",
     run: () =>
       assertPermittedXeroRequest(
         "POST",
         "Invoices",
-        JSON.stringify({ Type: "ACCPAY", Status: "AUTHORISED" })
+        JSON.stringify({ Type: "ACCREC", Status: "AUTHORISED" })
+      ),
+  },
+  {
+    name: "POST /Invoices/{id} throws (updates/voids unreachable)",
+    expect: "throw",
+    run: () =>
+      assertPermittedXeroRequest(
+        "POST",
+        "Invoices/abc-123",
+        JSON.stringify({ Type: "ACCPAY", Status: "DRAFT" })
       ),
   },
   {

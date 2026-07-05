@@ -1627,34 +1627,87 @@ interface ApiBookingRequest {
   nights: number;
   totalPence: number;
   status: string;
+  invoiceId: string | null;
+  invoiceState: string | null;
   createdAt: number;
 }
 
-// Booking requests from the public /book site, surfaced in the ops view.
-// Raising the ACCREC invoice from a confirmed booking is the next step —
-// the queue makes the intake→review seam visible now.
-function BookingQueue() {
+const INVOICE_STATE_TAG: Record<string, string> = {
+  pending: "draft",
+  authorised: "read",
+  paid: "approved",
+  voided: "src",
+};
+
+// Booking requests from the public /book site. Confirm raises an ACCREC
+// sales invoice at SUBMITTED in Xero; the state chip then reads Xero live —
+// a human authorising/paying there flips it here.
+function BookingQueue({ onLedgerChange }: { onLedgerChange: () => void }) {
   const [bookings, setBookings] = useState<ApiBookingRequest[]>([]);
-  React.useEffect(() => {
-    fetch("/api/bookings").then((r) => r.json()).then((d) => setBookings(d.bookings ?? [])).catch(() => setBookings([]));
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/bookings");
+      setBookings(((await res.json()) as { bookings: ApiBookingRequest[] }).bookings ?? []);
+    } catch { setBookings([]); }
   }, []);
+  React.useEffect(() => { void load(); }, [load]);
+
+  const decide = async (id: string, decision: "confirmed" | "declined") => {
+    setBusyId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/bookings/${id}/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "decision failed");
+      await load();
+      onLedgerChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (bookings.length === 0) return null;
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <div className="sect-t">Booking requests · {bookings.filter((b) => b.status === "requested").length} new</div>
-        <span className="subtle" style={{ fontSize: 12 }}>from the public booking site</span>
+        <span className="subtle" style={{ fontSize: 12 }}>from the public booking site · confirm raises an ACCREC invoice in Xero</span>
       </div>
+      {error && <p className="subtle" style={{ color: "var(--clay)", padding: "0 22px 8px", fontSize: 12.5 }}>{error}</p>}
       {bookings.map((b) => (
-        <div key={b.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "11px 22px", borderTop: "1px solid #EDF1F8" }}>
+        <div key={b.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "11px 22px", borderTop: "1px solid #EDF1F8", flexWrap: "wrap" }}>
           <span style={{ width: 52, height: 36, borderRadius: 7, overflow: "hidden", flex: "0 0 52px" }}><PropThumb pid={b.propertyId} /></span>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 13.5, fontWeight: 500 }}>{b.guestName} · {propById(b.propertyId).name}</div>
             <div className="subtle" style={{ fontSize: 11.5 }}>
               {b.nights} night{b.nights > 1 ? "s" : ""}{b.checkIn ? ` from ${b.checkIn}` : ""} · {penceToMoney(b.totalPence)}{b.guestEmail ? ` · ${b.guestEmail}` : ""}
             </div>
           </div>
-          <span className={`tag ${b.status === "requested" ? "hold" : b.status === "confirmed" ? "approved" : "src"}`}>{b.status}</span>
+          {b.status === "requested" ? (
+            <span style={{ display: "flex", gap: 8 }}>
+              <button className="btn sm focusable" onClick={() => void decide(b.id, "confirmed")} disabled={busyId === b.id}>
+                {busyId === b.id ? "Raising…" : "Confirm → invoice"}
+              </button>
+              <button className="btn sm ghost focusable" onClick={() => void decide(b.id, "declined")} disabled={busyId === b.id}>Decline</button>
+            </span>
+          ) : (
+            <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span className={`tag ${b.status === "confirmed" ? "approved" : "src"}`}>{b.status}</span>
+              {b.invoiceState && <span className={`tag ${INVOICE_STATE_TAG[b.invoiceState] ?? "src"}`}>invoice · {b.invoiceState}</span>}
+              {b.invoiceId && (
+                <a className="focusable subtle" style={{ fontSize: 11.5, textDecoration: "underline" }} href={`https://go.xero.com/AccountsReceivable/Edit.aspx?InvoiceID=${b.invoiceId}`} target="_blank" rel="noreferrer">View in Xero</a>
+              )}
+            </span>
+          )}
         </div>
       ))}
     </div>
@@ -1735,7 +1788,7 @@ function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolea
         <p className="h-sub">Reports from the field team. Review, price the fix, and send the bill to Xero — the accountant signs it off.</p>
       </div>
 
-      <BookingQueue />
+      <BookingQueue onLedgerChange={onLedgerChange} />
 
       {result && (
         <div className="callout" style={{ marginBottom: 14, ...(result.ok ? {} : { background: "var(--clay-soft)", borderColor: "var(--clay)" }) }}>

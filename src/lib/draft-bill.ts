@@ -33,6 +33,102 @@ function plusDays(isoDate: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export interface SalesInvoiceResult {
+  readonly ok: boolean;
+  readonly invoiceId?: string;
+  readonly needsContact?: boolean;
+  readonly error?: string;
+  readonly auditEventId?: string;
+}
+
+// The booking flow's write: an ACCREC sales invoice at Status SUBMITTED —
+// Xero's designed "pending approval" state (no journals, not payable).
+// A human authorises and takes payment in Xero; ShortStay only reads that
+// back. Same discipline as bills: contact must exist, read-back must match.
+export async function draftSalesInvoice(params: {
+  contactName: string;
+  description: string;
+  amountGBP: number;
+  reference: string;
+  parentEventId: string | null;
+  actor: string;
+}): Promise<SalesInvoiceResult> {
+  const contactId = await resolveContactId(params.contactName);
+  if (!contactId) {
+    return {
+      ok: false,
+      needsContact: true,
+      error: `No Xero contact matches "${params.contactName}" — create the contact in Xero first; ShortStay never creates contacts`,
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const body = JSON.stringify({
+    Type: "ACCREC",
+    Status: "SUBMITTED",
+    Contact: { ContactID: contactId },
+    Date: today,
+    DueDate: plusDays(today, 14),
+    LineAmountTypes: "Inclusive",
+    Reference: params.reference,
+    LineItems: [
+      {
+        Description: params.description.slice(0, 250),
+        Quantity: 1.0,
+        UnitAmount: params.amountGBP,
+        AccountCode: "200",
+      },
+    ],
+  });
+
+  const data = await xeroFetch<{ Invoices: { InvoiceID: string; Status?: string }[] }>(
+    "Invoices",
+    { method: "POST", body }
+  );
+  const invoice = data.Invoices?.[0];
+  if (!invoice?.InvoiceID) {
+    return { ok: false, error: "Xero returned no invoice from the create POST" };
+  }
+
+  const readBack = await getInvoiceById(invoice.InvoiceID);
+  if (readBack.Status !== "SUBMITTED" && readBack.Status !== "DRAFT") {
+    const escalation = await audit.append({
+      eventType: "guard.evaluated",
+      actor: "guardrails",
+      subjectType: "xero.invoice",
+      subjectId: invoice.InvoiceID,
+      parentEventId: params.parentEventId,
+      payload: {
+        decision: "escalate",
+        reason: `sales invoice read-back status is ${readBack.Status ?? "unknown"}, expected SUBMITTED`,
+      },
+    });
+    return {
+      ok: false,
+      invoiceId: invoice.InvoiceID,
+      error: `Xero read-back returned ${readBack.Status ?? "unknown"} instead of SUBMITTED — escalated`,
+      auditEventId: escalation.id,
+    };
+  }
+
+  const raised = await audit.append({
+    eventType: "invoice.raised",
+    actor: params.actor,
+    subjectType: "xero.invoice",
+    subjectId: invoice.InvoiceID,
+    parentEventId: params.parentEventId,
+    payload: {
+      type: "ACCREC",
+      contact: params.contactName,
+      amountGBP: params.amountGBP,
+      reference: params.reference,
+      xeroStatus: readBack.Status,
+    },
+  });
+
+  return { ok: true, invoiceId: invoice.InvoiceID, auditEventId: raised.id };
+}
+
 export async function draftCodedBill(params: {
   coded: CodedReceipt;
   receiptId: string;

@@ -3,16 +3,47 @@ import { desc } from "drizzle-orm";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { bookingRequests } from "@/lib/schema";
+import { getInvoiceById, NotConnectedError } from "@/lib/xero";
 
 // Public booking intake (no auth — the /book site is guest-facing) + queue
 // read for the ops view. booking.recorded is already in the audit vocabulary.
+
+// pending (DRAFT/SUBMITTED) → authorised → paid. Read live from Xero — a
+// human authorising/paying there flips the chip here; ShortStay never
+// causes those transitions.
+function invoiceState(status?: string, amountDue?: number, amountPaid?: number): string {
+  if (status === "PAID" || (typeof amountPaid === "number" && amountPaid > 0 && amountDue === 0)) return "paid";
+  if (status === "AUTHORISED") return "authorised";
+  if (status === "VOIDED" || status === "DELETED") return "voided";
+  return "pending";
+}
 
 export async function GET() {
   const rows = await db
     .select()
     .from(bookingRequests)
     .orderBy(desc(bookingRequests.createdAt));
-  return NextResponse.json({ bookings: rows });
+
+  const enriched = await Promise.all(
+    rows.map(async (b) => {
+      if (!b.invoiceId) return { ...b, invoiceState: null as string | null };
+      try {
+        const inv = await getInvoiceById(b.invoiceId);
+        return {
+          ...b,
+          invoiceState: invoiceState(
+            inv.Status,
+            (inv as { AmountDue?: number }).AmountDue,
+            inv.AmountPaid
+          ),
+        };
+      } catch (err) {
+        if (err instanceof NotConnectedError) return { ...b, invoiceState: null };
+        return { ...b, invoiceState: null };
+      }
+    })
+  );
+  return NextResponse.json({ bookings: enriched });
 }
 
 export async function POST(request: Request) {
