@@ -106,6 +106,32 @@ export const bookingRequests = sqliteTable("booking_requests", {
     .$defaultFn(() => new Date()),
 });
 
+// Messenger threads with contacts (landlords, leads, teammates). Messages
+// are demo-local: "send" appends a row, no external delivery exists.
+export const threads = sqliteTable("threads", {
+  id: text("id").primaryKey().$defaultFn(uuid),
+  subject: text("subject"),
+  contactId: text("contact_id"),
+  contactName: text("contact_name").notNull(),
+  contactKind: text("contact_kind").notNull(), // "landlord" | "lead" | "teammate" | "contact"
+  lastMessageAt: integer("last_message_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const messages = sqliteTable("messages", {
+  id: text("id").primaryKey().$defaultFn(uuid),
+  threadId: text("thread_id").notNull(),
+  direction: text("direction").notNull(), // "in" | "out"
+  sender: text("sender").notNull(),
+  body: text("body").notNull(),
+  readAt: integer("read_at", { mode: "timestamp_ms" }), // null on "in" = unread
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const approvals = sqliteTable("approvals", {
   id: text("id").primaryKey().$defaultFn(uuid),
   kind: text("kind").notNull(),

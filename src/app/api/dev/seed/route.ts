@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { bookings, properties, prompts } from "@/lib/schema";
+import { bookings, messages, properties, prompts, threads } from "@/lib/schema";
 import { promptRegistry } from "@/lib/prompt-registry";
 
 // Dev-only idempotent seed: the receipt-coder prompt, the property registry,
@@ -90,6 +90,60 @@ export async function POST() {
     } else {
       skipped.push(`booking:${b.id}`);
     }
+  }
+
+  // Messenger threads — inbound messages left unread so the launcher pip
+  // shows on first load. Skip wholesale if any thread exists.
+  const existingThreads = await db.select({ id: threads.id }).from(threads).limit(1);
+  if (existingThreads.length === 0) {
+    const now = Date.now();
+    const seedThreads = [
+      {
+        contactName: "Amara Okafor",
+        contactKind: "landlord",
+        subject: "June payout timing",
+        msgs: [
+          { body: "Hi — quick one, when does the June statement land? I've got a mortgage payment on the 8th.", offsetMin: -180 },
+          { body: "Also is the Dockside plumbing invoice in there?", offsetMin: -175 },
+        ],
+      },
+      {
+        contactName: "Priya Raman",
+        contactKind: "lead",
+        subject: "Gasholder Studio — late August?",
+        msgs: [{ body: "Hello! Is Gasholder Studio free 21–25 August for 2 guests? And is there a desk — I'll be working.", offsetMin: -60 * 26 }],
+      },
+      {
+        contactName: "Tom Whitfield",
+        contactKind: "teammate",
+        subject: "Bill amount check",
+        msgs: [{ body: "Before you approve — that plumber bill looks doubled vs the receipt. Can you check the capture?", offsetMin: -60 * 40 }],
+      },
+    ];
+    for (const t of seedThreads) {
+      const lastOffset = t.msgs[t.msgs.length - 1].offsetMin;
+      const [thread] = await db
+        .insert(threads)
+        .values({
+          contactName: t.contactName,
+          contactKind: t.contactKind,
+          subject: t.subject,
+          lastMessageAt: new Date(now + lastOffset * 60_000),
+        })
+        .returning();
+      for (const m of t.msgs) {
+        await db.insert(messages).values({
+          threadId: thread.id,
+          direction: "in",
+          sender: t.contactName,
+          body: m.body,
+          createdAt: new Date(now + m.offsetMin * 60_000),
+        });
+      }
+      done.push(`thread:${t.contactName}`);
+    }
+  } else {
+    skipped.push("threads");
   }
 
   return NextResponse.json({ seeded: done, skipped });

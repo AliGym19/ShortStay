@@ -2036,22 +2036,18 @@ function ContactsTab({ onMessage }: { onMessage: (name: string) => void }) {
   );
 }
 
-/* ---- messenger dock (POC — client-side threads) ---- */
+/* ---- messenger dock (SQLite-backed threads) ---- */
 interface PocMsg { from: string; body: string; ts: string; mine: boolean }
 interface PocThread { id: string; name: string; kind: string; msgs: PocMsg[]; unread: boolean }
-const SEED_THREADS: PocThread[] = [
-  { id: "t1", name: "Amara Okafor", kind: "landlord", unread: true, msgs: [
-    { from: "Amara Okafor", body: "Hi — quick one, when does the June statement land? Mortgage payment on the 8th.", ts: "09:12", mine: false },
-    { from: "Amara Okafor", body: "Also is the Dockside plumbing invoice in there?", ts: "09:14", mine: false },
-  ]},
-  { id: "t2", name: "Priya Raman", kind: "lead", unread: true, msgs: [
-    { from: "Priya Raman", body: "Hello! Is Gasholder Studio free 21–25 August for 2 guests?", ts: "Yesterday", mine: false },
-  ]},
-  { id: "t3", name: "Tom Whitfield", kind: "teammate", unread: false, msgs: [
-    { from: "Tom Whitfield", body: "Before you approve — the plumber bill looks doubled vs the receipt. Check the capture?", ts: "Thu", mine: false },
-    { from: "me", body: "On it — re-checking against the receipt now.", ts: "Thu", mine: true },
-  ]},
-];
+
+interface ApiThreadSummary {
+  id: string;
+  contactName: string;
+  contactKind: string;
+  lastMessage: string;
+  lastMessageAt: number;
+  unread: number;
+}
 
 function Dock({ popups, threads, onOpen, onClose, onMin, onReply }: {
   popups: { id: string; minimized: boolean }[];
@@ -2147,28 +2143,91 @@ export default function ShortStayApp({ userName, role }: { userName: string; rol
 
   const hasDraftedBill = auditEvents.some((e) => e.eventType === "bill.drafted");
 
-  // Messenger POC — client-side threads + Gmail-style dock.
-  const [threads, setThreads] = useState<PocThread[]>(SEED_THREADS);
+  // Messenger — SQLite-backed threads behind the same dock UI. Thread
+  // summaries load with refresh(); message bodies load when a window opens.
+  const [threads, setThreads] = useState<PocThread[]>([]);
   const [popups, setPopups] = useState<{ id: string; minimized: boolean }[]>([]);
+
+  const loadThreads = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/threads");
+      const data = (await res.json()) as { threads: ApiThreadSummary[] };
+      setThreads((prev) =>
+        (data.threads ?? []).map((t) => ({
+          id: t.id,
+          name: t.contactName,
+          kind: t.contactKind,
+          unread: t.unread > 0,
+          // keep any already-loaded message bodies; the summary only carries the preview
+          msgs: prev.find((p) => p.id === t.id)?.msgs ?? [
+            ...(t.lastMessage ? [{ from: t.contactName, body: t.lastMessage, ts: "", mine: false }] : []),
+          ],
+        }))
+      );
+    } catch {
+      // dock simply stays empty when the API is unreachable
+    }
+  }, []);
+  React.useEffect(() => { void loadThreads(); }, [loadThreads]);
+
+  const loadMessages = async (threadId: string) => {
+    try {
+      const res = await fetch(`/api/messages?threadId=${encodeURIComponent(threadId)}`);
+      const data = (await res.json()) as { messages: { sender: string; body: string; direction: string; createdAt: number }[] };
+      setThreads((ts) =>
+        ts.map((t) =>
+          t.id === threadId
+            ? {
+                ...t,
+                unread: false,
+                msgs: (data.messages ?? []).map((m) => ({
+                  from: m.sender,
+                  body: m.body,
+                  ts: new Date(m.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+                  mine: m.direction === "out",
+                })),
+              }
+            : t
+        )
+      );
+    } catch { /* keep preview */ }
+  };
+
   const openPopup = (id: string) =>
     setPopups((ps) => {
       if (ps.some((p) => p.id === id)) return ps.map((p) => (p.id === id ? { ...p, minimized: false } : p));
-      const next = [{ id, minimized: false }, ...ps];
-      return next.slice(0, 3); // POC cap: 3 windows
+      return [{ id, minimized: false }, ...ps].slice(0, 3);
     });
   const openThread = (id: string) => {
-    setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, unread: false } : t)));
     openPopup(id);
+    void loadMessages(id);
   };
-  const openMessageTo = (name: string) => {
+  const openMessageTo = async (name: string) => {
     const existing = threads.find((t) => t.name === name);
     if (existing) { openThread(existing.id); return; }
-    const id = `t-${name.toLowerCase().replace(/\W+/g, "-")}`;
-    setThreads((ts) => [{ id, name, kind: "contact", unread: false, msgs: [] }, ...ts]);
-    openPopup(id);
+    // Creating the thread lazily on first send keeps the API simple; until
+    // then show an empty local window keyed by a temp id.
+    try {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: name, body: "👋" }),
+      });
+      const data = await res.json();
+      await loadThreads();
+      if (data.threadId) openThread(data.threadId);
+    } catch { /* noop */ }
   };
-  const reply = (id: string, body: string) =>
+  const reply = async (id: string, body: string) => {
     setThreads((ts) => ts.map((t) => (t.id === id ? { ...t, msgs: [...t.msgs, { from: "me", body, ts: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }), mine: true }] } : t)));
+    try {
+      await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId: id, body }),
+      });
+    } catch { /* optimistic append stays; reload would reconcile */ }
+  };
   const unreadCount = threads.filter((t) => t.unread).length;
 
   const NAV_ALL: [TabKey, string, React.ReactElement, number?][] = [
