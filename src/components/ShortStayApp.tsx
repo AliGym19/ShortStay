@@ -885,12 +885,33 @@ function Statements({ statements, onRefresh }: {
   );
 }
 
-function Reconcile() {
-  const [matched, setMatched] = useState(false);
+function Reconcile({ onLedgerChange }: { onLedgerChange: () => void }) {
+  const [result, setResult] = useState<{ matched: boolean; split: Record<string, number>; reason?: string } | null>(null);
   const subset = ["bk-201", "bk-207", "bk-231", "bk-238", "bk-261", "bk-268"];
   const rows = BOOKINGS.filter((b) => subset.includes(b.id)).map((b) => ({ ...b, net: round2(b.gross * 0.85) }));
   const payout = round2(rows.reduce((s, r) => s + r.net, 0));
-  const bySplit = PROPERTIES.map((p) => ({ p, net: round2(rows.filter((r) => r.propertyId === p.id).reduce((s, r) => s + r.net, 0)) })).filter((x) => x.net > 0);
+  const matched = result?.matched ?? false;
+
+  // Deterministic server-side match: payout = Σ(gross × 0.85) ±1p over the
+  // candidate set — audited as payout.matched. The LLM never touches money.
+  const runMatch = async () => {
+    try {
+      const res = await fetch("/api/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payoutPence: Math.round(payout * 100), bookingIds: subset }),
+      });
+      const data = await res.json();
+      setResult({ matched: !!data.matched, split: data.perPropertySplitPence ?? {}, reason: data.reason });
+    } catch {
+      setResult({ matched: false, split: {}, reason: "reconcile request failed" });
+    }
+    onLedgerChange();
+  };
+
+  const bySplit = result?.matched
+    ? Object.entries(result.split).map(([pid, net]) => ({ p: propById(pid), net: net / 100 }))
+    : [];
 
   return (
     <>
@@ -908,7 +929,7 @@ function Reconcile() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div className="sect-t"><Ico d={I.reconcile} cls="ico" /> Bookings inside this payout</div>
-          {!matched && <button className="btn sm focusable" onClick={() => setMatched(true)}>Match payout to bookings</button>}
+          {!matched && <button className="btn sm focusable" onClick={runMatch}>Match payout to bookings</button>}
         </div>
         <table className="led">
           <thead><tr><th>Booking</th><th>Property</th><th>Guest</th><th className="r">Gross</th><th className="r">Net (−15%)</th><th className="r">State</th></tr></thead>
@@ -938,7 +959,12 @@ function Reconcile() {
               </div>
             ))}
           </div>
-          <p className="subtle" style={{ marginTop: 14, fontSize: 12.5 }}>Reconciled to the penny · <span className="mono">{money(payout)}</span>. Feeds each property&apos;s revenue line on the landlord statement.</p>
+          <p className="subtle" style={{ marginTop: 14, fontSize: 12.5 }}>Reconciled to the penny · <span className="mono">{money(payout)}</span> · <span className="mono">payout.matched</span> recorded. {result?.reason}</p>
+        </div>
+      )}
+      {result && !result.matched && (
+        <div className="callout" style={{ background: "var(--amber-soft)", borderColor: "var(--amber)" }}>
+          <b>No deterministic match.</b> {result.reason} — pick the bookings yourself; ShortStay never guesses.
         </div>
       )}
     </>
@@ -1081,7 +1107,7 @@ export default function ShortStayApp() {
         {tab === "overview" && <Overview statements={statements} go={setTab} />}
         {tab === "capture" && <Capture audit={auditEvents} onLedgerChange={() => void refresh()} />}
         {tab === "statements" && <Statements statements={statements} onRefresh={() => void refresh()} />}
-        {tab === "reconcile" && <Reconcile />}
+        {tab === "reconcile" && <Reconcile onLedgerChange={() => void refresh()} />}
         {tab === "ledger" && <Ledger audit={auditEvents} />}
       </main>
     </div>
