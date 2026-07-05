@@ -71,7 +71,7 @@ const Style = () => (
   .seal-txt b{color:#CFDCF2;font-weight:600}
 
   /* ---- main ---- */
-  .main{flex:1;min-width:0;padding:30px 40px 64px;max-width:1180px}
+  .main{flex:1;min-width:0;padding:30px 40px 64px;max-width:1380px}
   .head{margin-bottom:24px}
   .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--pine2);margin-bottom:8px}
   .h-title{font-size:29px;font-weight:600;letter-spacing:-.02em;line-height:1.08}
@@ -165,11 +165,29 @@ const Style = () => (
   .leg .ll{color:var(--muted)}
 
   .gate{border-radius:12px;border:1px solid var(--line);overflow:hidden}
-  .gate-h{padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px}
-  .guard-line{display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 18px;border-top:1px solid #F0EBDE}
+  .gate-h{padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .guard-line{display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 18px;border-top:1px solid #F0EBDE;flex-wrap:wrap}
   .guard-line .gd{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
   .guard-line .gn{font-family:'Space Mono';font-size:12px;color:var(--muted)}
   .guard-line .gr{margin-left:auto;font-size:12.5px;color:var(--muted)}
+
+  /* ---- statements two-column: gate fills the right rail ---- */
+  .stmt-grid{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:16px;align-items:start}
+  .stmt-side{position:sticky;top:20px}
+  .stmt-side .guard-line .gr{margin-left:18px;flex-basis:100%}
+  @media (max-width:1100px){.stmt-grid{grid-template-columns:1fr}.stmt-side{position:static}}
+
+  /* ---- property thumbnail + details ---- */
+  .prop-head{display:flex;align-items:center;gap:12px}
+  .prop-thumb{width:64px;height:44px;border-radius:8px;flex:0 0 64px;border:1px solid var(--line);
+    cursor:pointer;padding:0;background:none;overflow:hidden;transition:.15s}
+  .prop-thumb:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+  .prop-thumb svg{width:100%;height:100%;display:block}
+  .prop-details{border-top:1px dashed var(--line);padding:12px 22px;display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 20px;background:#FBFCFE}
+  .prop-details .pd{font-size:12.5px}
+  .prop-details .pd .pdl{color:var(--faint);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:2px}
+  .prop-details .pd .pdv{color:var(--txt)}
 
   /* ---- audit ---- */
   .evt{display:grid;grid-template-columns:150px 1fr auto;gap:14px;align-items:center;padding:10px 4px;border-bottom:1px solid #F0EBDE;position:relative}
@@ -416,6 +434,73 @@ Deliver to: Tin Quarter Mews, Digbeth
 
 Total:  £64.00  (VAT included)`,
 };
+
+// Property registry detail — shown when a property thumbnail is clicked.
+interface PropertyInfo {
+  address: string;
+  landlord: string;
+  contact: string;
+  occupied: boolean;
+  occupancy: string;
+  nextChangeover: string;
+}
+const PROPERTY_INFO: Record<string, PropertyInfo> = {
+  P1: {
+    address: "14 Dockside Wharf, Wapping, London E1W 3TD",
+    landlord: "Amara Okafor",
+    contact: "amara.okafor@mail.com · 07700 900412",
+    occupied: true,
+    occupancy: "Occupied · K. Duval until 30 Jun",
+    nextChangeover: "30 Jun · Sparkle Turnarounds booked",
+  },
+  P2: {
+    address: "3 Gasholder Place, King's Cross, London N1C 4AB",
+    landlord: "Amara Okafor",
+    contact: "amara.okafor@mail.com · 07700 900412",
+    occupied: false,
+    occupancy: "Vacant · next check-in 2 Jul",
+    nextChangeover: "1 Jul · deep clean scheduled",
+  },
+  P3: {
+    address: "27 Tin Quarter Mews, Digbeth, Birmingham B9 4AA",
+    landlord: "The Whitfield Trust",
+    contact: "lettings@whitfieldtrust.org · 0121 496 0203",
+    occupied: true,
+    occupancy: "Occupied · N. Palmer until 27 Jun",
+    nextChangeover: "27 Jun · BrightKey Cleaning booked",
+  },
+};
+
+// Placeholder visual per property — abstract building silhouettes, hue-keyed.
+const PROP_THUMB_HUES: Record<string, [string, string]> = {
+  P1: ["#2B55C4", "#1B3F9C"],
+  P2: ["#3C6E63", "#2C5148"],
+  P3: ["#9E4A34", "#7D3A28"],
+};
+
+function PropThumb({ pid }: { pid: string }) {
+  const [light, dark] = PROP_THUMB_HUES[pid] ?? PROP_THUMB_HUES.P1;
+  return (
+    <svg viewBox="0 0 64 44" aria-hidden>
+      <defs>
+        <linearGradient id={`sky-${pid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={light} stopOpacity=".16" />
+          <stop offset="1" stopColor={light} stopOpacity=".05" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="44" fill={`url(#sky-${pid})`} />
+      <rect x="8" y="16" width="14" height="28" rx="1.5" fill={light} opacity=".8" />
+      <rect x="26" y="8" width="16" height="36" rx="1.5" fill={dark} opacity=".85" />
+      <rect x="46" y="22" width="11" height="22" rx="1.5" fill={light} opacity=".55" />
+      {[0, 1, 2].map((r) => (
+        <g key={r} fill="#fff" opacity=".85">
+          <rect x={29} y={13 + r * 8} width="3.4" height="4" rx=".6" />
+          <rect x={35} y={13 + r * 8} width="3.4" height="4" rx=".6" />
+        </g>
+      ))}
+    </svg>
+  );
+}
 
 const SCOPES_GRANTED = [
   { s: "accounting.contacts.read", why: "resolve landlord / supplier" },
@@ -692,9 +777,7 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
   return (
     <>
       <div className="head">
-        <div className="eyebrow">The agent does the admin</div>
         <h1 className="h-title">Code a receipt into a draft bill</h1>
-        <p className="h-sub">Claude will read and extract figures from invoices and create a draft bill in Xero for you.</p>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -802,10 +885,9 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
               </div>
 
               {state === "drafted" && drafted?.ok && (
-                <div className="callout" style={{ marginTop: 16 }}>
-                  <b>Draft bill created in Xero</b> — <span className="mono" style={{ fontSize: 12 }}>{drafted.invoiceId}</span>, coded {money(fields.gross)} to {fields.code} for {fields.propName}. Read back and verified <b>DRAFT</b> — it waits in Xero for a human to approve.{" "}
-                  <a className="focusable" style={{ fontWeight: 600, textDecoration: "underline" }} href={`https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${drafted.invoiceId}`} target="_blank" rel="noreferrer">View in Xero →</a>
-                  {drafted.warning && <div className="subtle" style={{ marginTop: 8, fontSize: 12 }}>⚠ {drafted.warning}</div>}
+                <div className="callout" style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+                  <span><b>Draft bill created in Xero.</b> Waiting in Xero for your approval.</span>
+                  <a className="btn sm focusable" style={{ textDecoration: "none" }} href={`https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${drafted.invoiceId}`} target="_blank" rel="noreferrer">View in Xero →</a>
                 </div>
               )}
               {state === "drafted" && drafted && !drafted.ok && (
@@ -897,6 +979,7 @@ function Statements({ statements, onRefresh }: {
 }) {
   const [lid, setLid] = useState<string>("L1");
   const [gate, setGate] = useState<Record<string, ApiApproveResponse | undefined>>({});
+  const [openProp, setOpenProp] = useState<string | null>(null);
   const st = statements[lid];
   const gateResult = gate[lid];
   const status = gateResult?.status ?? st?.status ?? "assembled";
@@ -952,9 +1035,7 @@ function Statements({ statements, onRefresh }: {
   return (
     <>
       <div className="head">
-        <div className="eyebrow">Monthly statements</div>
         <h1 className="h-title">Per-landlord monthly statement</h1>
-        <p className="h-sub">Revenue in, commission and fee and costs out, owed to landlord — every line traceable to its Xero source. This is the landlord&apos;s tax document and your value in one artifact. It is never auto-sent.</p>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
@@ -964,99 +1045,127 @@ function Statements({ statements, onRefresh }: {
         <span className="chip" style={{ marginLeft: "auto", cursor: "default" }}>{st?.month ?? "June 2026"}</span>
       </div>
 
-      {!st && (
-        <div className="card pad subtle" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span className="spinner dk" /> Assembling from live sources…
-        </div>
-      )}
+      <div className="stmt-grid">
+        <div>
+          {!st && (
+            <div className="card pad subtle" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <span className="spinner dk" /> Assembling from live sources…
+            </div>
+          )}
 
-      {st && (
-        <>
-          <div className="card pad" style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+          {st && (
+            <>
+              <div className="card pad" style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+                  <div>
+                    <div className="disp" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.02em" }}>{st.landlordName}</div>
+                    <div className="subtle" style={{ marginTop: 3 }}>{perProp.length} propert{perProp.length > 1 ? "ies" : "y"} · statement <span className="mono" style={{ fontSize: 12 }}>{st.statementId.slice(0, 8)}</span>{!st.xeroConnected && <span className="tag hold" style={{ marginLeft: 8 }}>Xero disconnected — costs not read</span>}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="subtle" style={{ fontSize: 12 }}>Owed to landlord</div>
+                    <div className="num" style={{ fontSize: 30, fontWeight: 700, color: "var(--pine)", letterSpacing: "-.03em" }}>{penceToMoney(st.totals.owedPence)}</div>
+                  </div>
+                </div>
+                <Bridge totals={st.totals} />
+              </div>
+
+              {perProp.map(({ p, revenue, commission, fee, owed, stays, costs: pc }) => {
+                const info = PROPERTY_INFO[p.id];
+                const open = openProp === p.id;
+                return (
+                  <div className="card" key={p.id} style={{ marginBottom: 14 }}>
+                    <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                      <div className="prop-head">
+                        <button className="prop-thumb focusable" onClick={() => setOpenProp(open ? null : p.id)} title={`${p.name} details`} aria-expanded={open}>
+                          <PropThumb pid={p.id} />
+                        </button>
+                        <div>
+                          <div className="sect-t">{p.name} <span className="subtle" style={{ fontWeight: 400 }}>· {p.area}</span></div>
+                          {info && <span className={`tag ${info.occupied ? "approved" : "hold"}`} style={{ marginTop: 4 }}>{info.occupied ? "Occupied" : "Vacant"}</span>}
+                        </div>
+                      </div>
+                      <div className="num" style={{ fontWeight: 700 }}>{penceToMoney(owed)} <span className="subtle" style={{ fontWeight: 400, fontSize: 12 }}>owed</span></div>
+                    </div>
+                    {open && info && (
+                      <div className="prop-details">
+                        <div className="pd"><div className="pdl">Address</div><div className="pdv">{info.address}</div></div>
+                        <div className="pd"><div className="pdl">Landlord</div><div className="pdv">{info.landlord}</div></div>
+                        <div className="pd"><div className="pdl">Contact</div><div className="pdv">{info.contact}</div></div>
+                        <div className="pd"><div className="pdl">Occupancy</div><div className="pdv">{info.occupancy}</div></div>
+                        <div className="pd"><div className="pdl">Next changeover</div><div className="pdv">{info.nextChangeover}</div></div>
+                      </div>
+                    )}
+                    <table className="led">
+                      <tbody>
+                        <tr>
+                          <td><span style={{ fontWeight: 600 }}>Booking revenue</span><div className="subtle">{stays} stays</div></td>
+                          <td><span className="tag src">booking ledger</span></td>
+                          <td className="r num" style={{ fontWeight: 700 }}>{penceToMoney(revenue)}</td>
+                        </tr>
+                        <tr>
+                          <td>Booking.com commission <span className="subtle">15%</span></td>
+                          <td><span className="tag src">computed</span></td>
+                          <td className="r num" style={{ color: "var(--amber)" }}>−{penceToMoney(commission)}</td>
+                        </tr>
+                        <tr>
+                          <td>Agency management fee <span className="subtle">12%</span></td>
+                          <td><span className="tag src">computed</span></td>
+                          <td className="r num" style={{ color: "var(--teal)" }}>−{penceToMoney(fee)}</td>
+                        </tr>
+                        {pc.map((c) => (
+                          <tr key={c.sourceId + c.description}>
+                            <td style={{ paddingLeft: 22 }}>{c.description} <span className="subtle">· {c.date}</span></td>
+                            <td><span className="tag src">ACCPAY {c.sourceId.slice(0, 8)} · {c.billStatus}</span></td>
+                            <td className="r num" style={{ color: "var(--clay)" }}>−{penceToMoney(c.amountPence)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td style={{ fontWeight: 700, color: "var(--ink)" }}>Owed to {st.landlordName.split(" ")[0]}</td>
+                          <td><span className="tag src">computed</span></td>
+                          <td className="r num" style={{ fontWeight: 700, color: "var(--pine)" }}>{penceToMoney(owed)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+
+        <aside className="stmt-side">
+          <div className="card">
+            <div className="gate-h">
               <div>
-                <div className="disp" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-.02em" }}>{st.landlordName}</div>
-                <div className="subtle" style={{ marginTop: 3 }}>{perProp.length} propert{perProp.length > 1 ? "ies" : "y"} · statement <span className="mono" style={{ fontSize: 12 }}>{st.statementId.slice(0, 8)}</span>{!st.xeroConnected && <span className="tag hold" style={{ marginLeft: 8 }}>Xero disconnected — costs not read</span>}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="subtle" style={{ fontSize: 12 }}>Owed to landlord</div>
-                <div className="num" style={{ fontSize: 30, fontWeight: 700, color: "var(--pine)", letterSpacing: "-.03em" }}>{penceToMoney(st.totals.owedPence)}</div>
+                <div className="sect-t"><Ico d={<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5 11V8a7 7 0 0 1 14 0v3M4 11h16v10H4z" />} cls="ico" /> Human approval gate</div>
+                <div className="subtle" style={{ marginTop: 5, fontSize: 12.5 }}>Guards decide; they never act. ShortStay cannot release funds — approval only authorises you to.</div>
               </div>
             </div>
-            <Bridge totals={st.totals} />
-          </div>
-
-          {perProp.map(({ p, revenue, commission, fee, owed, stays, costs: pc }) => (
-            <div className="card" key={p.id} style={{ marginBottom: 14 }}>
-              <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <div className="sect-t">{p.name} <span className="subtle" style={{ fontWeight: 400 }}>· {p.area}</span></div>
-                <div className="num" style={{ fontWeight: 700 }}>{penceToMoney(owed)} <span className="subtle" style={{ fontWeight: 400, fontSize: 12 }}>owed</span></div>
-              </div>
-              <table className="led">
-                <tbody>
-                  <tr>
-                    <td><span style={{ fontWeight: 600 }}>Booking revenue</span><div className="subtle">{stays} stays</div></td>
-                    <td><span className="tag src">booking ledger</span></td>
-                    <td className="r num" style={{ fontWeight: 700 }}>{penceToMoney(revenue)}</td>
-                  </tr>
-                  <tr>
-                    <td>Booking.com commission <span className="subtle">15%</span></td>
-                    <td><span className="tag src">computed</span></td>
-                    <td className="r num" style={{ color: "var(--amber)" }}>−{penceToMoney(commission)}</td>
-                  </tr>
-                  <tr>
-                    <td>Agency management fee <span className="subtle">12%</span></td>
-                    <td><span className="tag src">computed</span></td>
-                    <td className="r num" style={{ color: "var(--teal)" }}>−{penceToMoney(fee)}</td>
-                  </tr>
-                  {pc.map((c) => (
-                    <tr key={c.sourceId + c.description}>
-                      <td style={{ paddingLeft: 22 }}>{c.description} <span className="subtle">· {c.date}</span></td>
-                      <td><span className="tag src">ACCPAY {c.sourceId.slice(0, 8)} · {c.billStatus}</span></td>
-                      <td className="r num" style={{ color: "var(--clay)" }}>−{penceToMoney(c.amountPence)}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td style={{ fontWeight: 700, color: "var(--ink)" }}>Owed to {st.landlordName.split(" ")[0]}</td>
-                    <td><span className="tag src">computed</span></td>
-                    <td className="r num" style={{ fontWeight: 700, color: "var(--pine)" }}>{penceToMoney(owed)}</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div style={{ padding: "0 18px 14px" }}>
+              {status === "approved"
+                ? <span className="tag approved" style={{ fontSize: 12.5, padding: "6px 12px" }}>✓ Approved for release · you authorised</span>
+                : <button className="btn focusable" style={{ width: "100%", justifyContent: "center" }} onClick={approve} disabled={!st}>{status === "held" ? "Re-run guards" : "Approve statement for release"}</button>}
             </div>
-          ))}
-        </>
-      )}
-
-      <div className="card" style={{ marginTop: 4 }}>
-        <div className="gate-h">
-          <div>
-            <div className="sect-t"><Ico d={<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5 11V8a7 7 0 0 1 14 0v3M4 11h16v10H4z" />} cls="ico" /> Human approval gate</div>
-            <div className="subtle" style={{ marginTop: 5, fontSize: 12.5 }}>Guards decide; they never act. ShortStay cannot release funds — approval only authorises you to.</div>
+            {guards.map((g) => (
+              <div className="guard-line" key={g.name}>
+                <span className="gd" style={{ background: g.decision === "allow" ? "var(--sage)" : g.decision === "pause" ? "var(--amber)" : "var(--clay)" }} />
+                <span className="gn">{g.name}</span>
+                <span className="tag" style={{ background: g.decision === "allow" ? "var(--sage-soft)" : "var(--amber-soft)", color: g.decision === "allow" ? "#2c5a41" : "#8a5a10" }}>{g.decision}</span>
+                <span className="gr">{g.reason}</span>
+              </div>
+            ))}
+            {status === "approved" && (
+              <div className="callout" style={{ margin: "12px 14px 14px" }}>
+                <b>Statement approved.</b> ShortStay recorded <span className="mono">statement.approved</span> and stopped. No <span className="mono">Payment</span>, no <span className="mono">BankTransfer</span> — the payout is yours to send from Xero.
+              </div>
+            )}
+            {status === "held" && (
+              <div className="callout" style={{ margin: "12px 14px 14px", background: "var(--amber-soft)", borderColor: "var(--amber)" }}>
+                <b>Statement held.</b> The gate returned <span className="mono">409 · {gateResult?.decision}</span> and recorded <span className="mono">statement.held</span>. Resolve the guard reasons and re-run.
+              </div>
+            )}
           </div>
-          {status === "approved"
-            ? <span className="tag approved" style={{ fontSize: 12.5, padding: "6px 12px" }}>✓ Approved for release · you authorised</span>
-            : <button className="btn focusable" onClick={approve} disabled={!st}>{status === "held" ? "Re-run guards" : "Approve statement for release"}</button>}
-        </div>
-        {guards.map((g) => (
-          <div className="guard-line" key={g.name}>
-            <span className="gd" style={{ background: g.decision === "allow" ? "var(--sage)" : g.decision === "pause" ? "var(--amber)" : "var(--clay)" }} />
-            <span className="gn">{g.name}</span>
-            <span className="tag" style={{ background: g.decision === "allow" ? "var(--sage-soft)" : "var(--amber-soft)", color: g.decision === "allow" ? "#2c5a41" : "#8a5a10" }}>{g.decision}</span>
-            <span className="gr">{g.reason}</span>
-          </div>
-        ))}
-        {status === "approved" && (
-          <div className="callout" style={{ margin: "4px 18px 18px" }}>
-            <b>Statement approved.</b> ShortStay recorded <span className="mono">statement.approved</span> and stopped. No <span className="mono">Payment</span>, no <span className="mono">BankTransfer</span> — the payout is yours to send from Xero. The audit chain proves nothing moved.
-            {gateResult?.note && <div className="mono" style={{ marginTop: 8, fontSize: 11.5 }}>server said: “{gateResult.note}”</div>}
-          </div>
-        )}
-        {status === "held" && (
-          <div className="callout" style={{ margin: "4px 18px 18px", background: "var(--amber-soft)", borderColor: "var(--amber)" }}>
-            <b>Statement held.</b> The gate returned <span className="mono">409 · {gateResult?.decision}</span> and recorded <span className="mono">statement.held</span>. Resolve the guard reasons above and re-run — nothing is approvable until the guards allow it.
-          </div>
-        )}
+        </aside>
       </div>
     </>
   );
