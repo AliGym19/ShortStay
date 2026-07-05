@@ -17,15 +17,18 @@ const Style = () => (
   <style>{`
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Space+Mono:wght@400;700&display=swap');
 
+  /* HLB Intraconnect-style palette: white primary, deep blue accents.
+     Semantic data colours (amber/teal/clay deductions, sage allow) kept —
+     only brand surfaces and accents moved to blue. */
   :root{
-    --ink:#16241E; --pine:#244638; --pine2:#2E5A47; --pine-soft:#EAF0EC;
-    --paper:#F7F4ED; --surface:#FFFFFF; --sand:#EFE9DB; --line:#E1D9C8;
-    --txt:#1B2B24; --muted:#63614F; --faint:#8C8974;
+    --ink:#0B1F4B; --pine:#1B3F9C; --pine2:#2B55C4; --pine-soft:#E8EEFB;
+    --paper:#F7F9FC; --surface:#FFFFFF; --sand:#EEF2F8; --line:#D9E2F0;
+    --txt:#16233D; --muted:#5A6B85; --faint:#8A99B5;
     --amber:#B8781E; --amber-soft:#F5EBD6;
     --teal:#3C6E63; --teal-soft:#E4EEEB;
     --clay:#9E4A34; --clay-soft:#F2E2DC;
     --sage:#3E7D5E; --sage-soft:#E4F0E9;
-    --shadow:0 1px 2px rgba(22,36,30,.05), 0 8px 24px -14px rgba(22,36,30,.18);
+    --shadow:0 1px 2px rgba(11,31,75,.05), 0 8px 24px -14px rgba(11,31,75,.18);
     --radius:14px;
   }
   *{box-sizing:border-box}
@@ -39,36 +42,36 @@ const Style = () => (
   .mono{font-family:'Space Mono',monospace; font-variant-numeric:tabular-nums;}
   .num{font-family:'Space Mono',monospace; font-variant-numeric:tabular-nums; letter-spacing:-.02em;}
   button{font-family:inherit; cursor:pointer}
-  ::selection{background:#D9E4DD}
+  ::selection{background:#D6E2F8}
   a{color:inherit}
 
   /* ---- sidebar ---- */
-  .side{width:238px; flex:0 0 238px; background:var(--ink); color:#DDE6E0;
+  .side{width:238px; flex:0 0 238px; background:var(--ink); color:#DDE4F2;
     display:flex; flex-direction:column; padding:22px 16px; position:sticky; top:0; height:100vh;}
   .brand{display:flex; align-items:center; gap:10px; padding:2px 6px 18px;}
   .brand-mark{width:30px;height:30px;flex:0 0 30px}
   .brand-name{font-family:'Space Grotesk';font-weight:700;font-size:19px;color:#fff;letter-spacing:-.01em}
-  .brand-sub{font-size:11px;color:#8FA69B;margin-top:1px;letter-spacing:.02em}
+  .brand-sub{font-size:11px;color:#8FA3CB;margin-top:1px;letter-spacing:.02em}
   .nav{display:flex;flex-direction:column;gap:2px;margin-top:6px}
   .nav-b{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;
-    color:#AEC0B7;padding:10px 12px;border-radius:9px;font-size:14.5px;font-weight:500;transition:.15s}
-  .nav-b:hover{background:rgba(255,255,255,.05);color:#EAF2ED}
+    color:#AEBEDF;padding:10px 12px;border-radius:9px;font-size:14.5px;font-weight:500;transition:.15s}
+  .nav-b:hover{background:rgba(255,255,255,.05);color:#EAF0FB}
   .nav-b.on{background:var(--pine2);color:#fff}
   .nav-b .ico{width:17px;height:17px;flex:0 0 17px;opacity:.9}
   .nav-b .pip{margin-left:auto;background:var(--amber);color:#231a08;font-size:11px;font-weight:700;
     border-radius:20px;padding:1px 7px;font-family:'Space Mono'}
   .side-spacer{flex:1}
-  .seal{background:linear-gradient(180deg,#1C2E27,#182620);border:1px solid #2C4034;border-radius:12px;
+  .seal{background:linear-gradient(180deg,#122A5E,#0E2350);border:1px solid #26407F;border-radius:12px;
     padding:13px 13px 12px;}
-  .seal-top{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk';font-weight:600;font-size:12.5px;color:#EAF2ED}
+  .seal-top{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk';font-weight:600;font-size:12.5px;color:#EAF0FB}
   .seal-dot{width:7px;height:7px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 4px rgba(62,125,94,.18)}
-  .seal-txt{font-size:11.5px;line-height:1.45;color:#93A79D;margin-top:7px}
-  .seal-txt b{color:#CFded6;font-weight:600}
+  .seal-txt{font-size:11.5px;line-height:1.45;color:#93A5C8;margin-top:7px}
+  .seal-txt b{color:#CFDCF2;font-weight:600}
 
   /* ---- main ---- */
   .main{flex:1;min-width:0;padding:30px 40px 64px;max-width:1180px}
   .head{margin-bottom:24px}
-  .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin-bottom:8px}
+  .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--pine2);margin-bottom:8px}
   .h-title{font-size:29px;font-weight:600;letter-spacing:-.02em;line-height:1.08}
   .h-sub{color:var(--muted);font-size:15px;margin-top:8px;max-width:64ch;line-height:1.5}
 
@@ -115,9 +118,9 @@ const Style = () => (
   .chip:hover:not(.on){border-color:var(--pine)}
 
   /* ---- capture ---- */
-  .receipt{background:#FCFBF6;border:1px dashed var(--line);border-radius:12px;padding:0;overflow:hidden}
+  .receipt{background:#FBFCFE;border:1px dashed var(--line);border-radius:12px;padding:0;overflow:hidden}
   .receipt textarea{width:100%;border:none;background:transparent;resize:vertical;min-height:210px;
-    font-family:'Space Mono';font-size:12.5px;line-height:1.7;color:#3a382c;padding:18px 18px;outline:none}
+    font-family:'Space Mono';font-size:12.5px;line-height:1.7;color:#2C3A55;padding:18px 18px;outline:none}
   .field{display:flex;justify-content:space-between;align-items:baseline;padding:11px 2px;border-bottom:1px solid #F0EBDE;opacity:0;transform:translateY(4px);animation:fade .4s forwards}
   .field .fl{font-size:12.5px;color:var(--muted);font-weight:500}
   .field .fv{font-family:'Space Mono';font-size:13.5px;color:var(--ink);font-weight:700}
@@ -176,7 +179,7 @@ const Style = () => (
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.001s !important;transition-duration:.001s !important}
   }
-  .focusable:focus-visible{outline:2.5px solid var(--amber);outline-offset:2px;border-radius:8px}
+  .focusable:focus-visible{outline:2.5px solid var(--pine2);outline-offset:2px;border-radius:8px}
   `}</style>
 );
 
@@ -390,8 +393,8 @@ const Ico = ({ d, cls = "ico" }: { d: React.ReactElement; cls?: string }) => (
 );
 const Mark = () => (
   <svg className="brand-mark" viewBox="0 0 40 40" fill="none">
-    <rect x="2" y="2" width="36" height="36" rx="9" fill="#2E5A47" />
-    <path d="M12 27V15l8-5 8 5v12" stroke="#EAF2ED" strokeWidth="2.2" strokeLinejoin="round" />
+    <rect x="2" y="2" width="36" height="36" rx="9" fill="#2B55C4" />
+    <path d="M12 27V15l8-5 8 5v12" stroke="#EAF0FB" strokeWidth="2.2" strokeLinejoin="round" />
     <circle cx="20" cy="20" r="3.1" stroke="#B8781E" strokeWidth="2.2" />
     <path d="M20 23.1V28" stroke="#B8781E" strokeWidth="2.2" strokeLinecap="round" />
   </svg>
@@ -631,11 +634,27 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
         <p className="h-sub">Drop the supplier receipt. Claude reads it, extracts the figures, picks the account and the property, and creates a <b>draft</b> ACCPAY bill in Xero. You confirm before anything is written.</p>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <span className="subtle" style={{ alignSelf: "center", marginRight: 4 }}>Inbox:</span>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <span className="subtle" style={{ marginRight: 4 }}>Inbox:</span>
         {([["plumbing", "Plumbing · Dockside"], ["cleaning", "Clean · Gasholder"], ["linen", "Linen · Tin Quarter"]] as const).map(([k, lab]) => (
           <button key={k} className={"chip focusable" + (text === INBOX_RECEIPTS[k] ? " on" : "")} onClick={() => load(k)}>{lab}</button>
         ))}
+        <label className="chip focusable" style={{ marginLeft: "auto", cursor: "pointer" }}>
+          ⬆ Upload invoice
+          <input
+            type="file"
+            accept="text/plain,.txt,.md,.csv,.eml,text/*"
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const content = await file.text();
+              setText(content);
+              setState("idle"); setFields(null); setDrafted(null); setMeta(null); setPreflight(null);
+              e.target.value = "";
+            }}
+          />
+        </label>
       </div>
 
       <div className="grid2">
@@ -713,7 +732,7 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
                     disabled={!xeroConnected || preflight?.contact === null || preflight?.contact === "checking"}
                     title={!xeroConnected ? "Connect Xero first" : preflight?.contact === null ? "Supplier has no Xero contact" : undefined}
                   >
-                    Create draft bill in Xero →
+                    Send to Xero →
                   </button>
                 )}
                 {state === "drafting" && <span className="subtle" style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}><span className="spinner dk" /> Writing draft…</span>}
@@ -1200,7 +1219,7 @@ export default function ShortStayApp() {
                 Live Xero connection · {xero.grantedScopes?.filter((s) => s.startsWith("accounting.")).length ?? 0} accounting scopes
                 {typeof xero.expiresAt === "number" && <> · token ~{Math.max(0, Math.round((xero.expiresAt - Date.now()) / 60_000))} min</>}
                 <div style={{ marginTop: 8 }}>
-                  <a className="focusable" href="/api/auth/disconnect" style={{ color: "#CFded6", fontSize: 11, textDecoration: "underline" }}>Disconnect</a>
+                  <a className="focusable" href="/api/auth/disconnect" style={{ color: "#CFDCF2", fontSize: 11, textDecoration: "underline" }}>Disconnect</a>
                 </div>
               </div>
             </>
