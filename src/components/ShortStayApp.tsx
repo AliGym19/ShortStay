@@ -257,6 +257,15 @@ interface ApiDraftBillResult {
   error?: string;
   auditEventId?: string;
 }
+interface ApiXeroStatus {
+  connected: boolean;
+  tenantName?: string;
+  tenantId?: string;
+  expiresAt?: number;
+  grantedScopes?: string[];
+  requestedScopes?: string[];
+  missingScopes?: string[];
+}
 
 const LANDLORD_IDS = ["L1", "L2"] as const;
 const penceToMoney = (p: number) => money(p / 100);
@@ -437,8 +446,9 @@ function KPI({ lab, big, foot, color, icon }: {
   );
 }
 
-function Overview({ statements, go }: {
+function Overview({ statements, xero, go }: {
   statements: Record<string, ApiStatement | undefined>;
+  xero: ApiXeroStatus | null;
   go: (t: TabKey) => void;
 }) {
   const loaded = LANDLORD_IDS.map((id) => statements[id]).filter(
@@ -471,7 +481,7 @@ function Overview({ statements, go }: {
   return (
     <>
       <div className="head">
-        <div className="eyebrow">June 2026 · month to date</div>
+        <div className="eyebrow">June 2026 · month to date{xero?.connected ? ` · live from ${xero.tenantName}` : " · Xero disconnected"}</div>
         <h1 className="h-title">The paperwork runs itself.<br />You approve every payout.</h1>
         <p className="h-sub">Booking revenue and costs are read from Xero, coded to the right property, and assembled into a landlord-ready P&amp;L. ShortStay drafts and flags — it never sends money.</p>
       </div>
@@ -523,15 +533,37 @@ function Overview({ statements, go }: {
 
 type CaptureState = "idle" | "coding" | "coded" | "drafting" | "drafted";
 
-function Capture({ audit, onLedgerChange }: { audit: ApiAuditEvent[]; onLedgerChange: () => void }) {
+interface Preflight {
+  contact: { contactId: string; name: string } | null | "checking";
+  account: { code?: string; name: string } | null | "checking";
+}
+
+function Capture({ audit, xeroConnected, onLedgerChange }: {
+  audit: ApiAuditEvent[];
+  xeroConnected: boolean;
+  onLedgerChange: () => void;
+}) {
   const [text, setText] = useState(INBOX_RECEIPTS.plumbing);
   const [state, setState] = useState<CaptureState>("idle");
   const [fields, setFields] = useState<CodedFields | null>(null);
   const [via, setVia] = useState<string | null>(null);
   const [drafted, setDrafted] = useState<ApiDraftBillResult | null>(null);
   const [meta, setMeta] = useState<{ receiptId: string; codedEventId: string } | null>(null);
+  const [preflight, setPreflight] = useState<Preflight | null>(null);
 
-  const load = (k: string) => { setText(INBOX_RECEIPTS[k]); setState("idle"); setFields(null); setDrafted(null); setMeta(null); };
+  const load = (k: string) => { setText(INBOX_RECEIPTS[k]); setState("idle"); setFields(null); setDrafted(null); setMeta(null); setPreflight(null); };
+
+  // Pre-flight: the same live Xero lookups the write path will make, run
+  // BEFORE the draft button — the round-trip is visible, not implied.
+  const runPreflight = async (supplier: string, code: string) => {
+    if (!xeroConnected) { setPreflight(null); return; }
+    setPreflight({ contact: "checking", account: "checking" });
+    const [contactRes, accountRes] = await Promise.all([
+      fetch(`/api/xero/contacts?name=${encodeURIComponent(supplier)}`).then((r) => (r.ok ? r.json() : { match: null })).catch(() => ({ match: null })),
+      fetch(`/api/xero/accounts?code=${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : { match: null })).catch(() => ({ match: null })),
+    ]);
+    setPreflight({ contact: contactRes.match ?? null, account: accountRes.match ?? null });
+  };
 
   const run = async () => {
     setState("coding"); setFields(null); setDrafted(null); setMeta(null);
@@ -556,6 +588,7 @@ function Capture({ audit, onLedgerChange }: { audit: ApiAuditEvent[]; onLedgerCh
     setVia(source);
     setState("coded");
     onLedgerChange();
+    void runPreflight(out.supplier, acc.code);
   };
 
   // The ONE write — through ShortStay's API, never from the browser to Xero.
@@ -639,10 +672,50 @@ function Capture({ audit, onLedgerChange }: { audit: ApiAuditEvent[]; onLedgerCh
                   <span className="fl">{l}</span><span className="fv">{v}</span>
                 </div>
               ))}
+              {preflight && (
+                <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--sand)", borderRadius: 9, fontSize: 12.5 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 11.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--faint)" }}>Live Xero pre-flight</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                    {preflight.contact === "checking" ? <span className="spinner dk" style={{ width: 11, height: 11 }} />
+                      : preflight.contact ? <span style={{ color: "var(--sage)", fontWeight: 700 }}>✓</span>
+                      : <span style={{ color: "var(--clay)", fontWeight: 700 }}>✗</span>}
+                    <span className="mono" style={{ fontSize: 11.5 }}>
+                      {preflight.contact === "checking" ? "resolving supplier against Xero contacts…"
+                        : preflight.contact ? `contact "${preflight.contact.name}" · ${preflight.contact.contactId.slice(0, 8)}…`
+                        : `no Xero contact matches "${fields.supplier}" — create it in Xero first`}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {preflight.account === "checking" ? <span className="spinner dk" style={{ width: 11, height: 11 }} />
+                      : preflight.account ? <span style={{ color: "var(--sage)", fontWeight: 700 }}>✓</span>
+                      : <span style={{ color: "var(--clay)", fontWeight: 700 }}>✗</span>}
+                    <span className="mono" style={{ fontSize: 11.5 }}>
+                      {preflight.account === "checking" ? "validating account code against the live chart…"
+                        : preflight.account ? `account ${fields.code} · "${preflight.account.name}" in the live chart`
+                        : `account ${fields.code} not in the org's chart`}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!xeroConnected && state === "coded" && (
+                <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--clay-soft)", borderRadius: 9, fontSize: 12.5 }}>
+                  Xero is not connected — the coded fields are ready, but drafting needs a live org. Sign in from the sidebar.
+                </div>
+              )}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
                 <span className="tag draft">Xero · ACCPAY · DRAFT</span>
                 <span className="subtle" style={{ fontSize: 12 }}>confidence {(fields.confidence * 100).toFixed(0)}%</span>
-                {state === "coded" && <button className="btn sm focusable" style={{ marginLeft: "auto" }} onClick={draft}>Create draft bill in Xero →</button>}
+                {state === "coded" && (
+                  <button
+                    className="btn sm focusable"
+                    style={{ marginLeft: "auto" }}
+                    onClick={draft}
+                    disabled={!xeroConnected || preflight?.contact === null || preflight?.contact === "checking"}
+                    title={!xeroConnected ? "Connect Xero first" : preflight?.contact === null ? "Supplier has no Xero contact" : undefined}
+                  >
+                    Create draft bill in Xero →
+                  </button>
+                )}
                 {state === "drafting" && <span className="subtle" style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}><span className="spinner dk" /> Writing draft…</span>}
               </div>
 
@@ -971,8 +1044,19 @@ function Reconcile({ onLedgerChange }: { onLedgerChange: () => void }) {
   );
 }
 
-function Ledger({ audit }: { audit: ApiAuditEvent[] }) {
+// Why each scope exists — display copy for the live grant.
+const SCOPE_WHY: Record<string, string> = {
+  "accounting.contacts.read": "resolve landlord / supplier",
+  "accounting.settings.read": "read chart of accounts",
+  "accounting.banktransactions.read": "read booking payouts in",
+  "accounting.invoices.read": "read back drafted bills (auto-granted with the write scope)",
+  "accounting.invoices": "the ONE write — draft a bill",
+  "accounting.reports.profitandloss.read": "P&L for forecasting",
+};
+
+function Ledger({ audit, xero }: { audit: ApiAuditEvent[]; xero: ApiXeroStatus | null }) {
   const [filter, setFilter] = useState("all");
+  const liveScopes = (xero?.grantedScopes ?? []).filter((s) => s.startsWith("accounting."));
   const types = ["all", ...Array.from(new Set(audit.map((e) => e.eventType)))];
   const shown = filter === "all" ? audit : audit.filter((e) => e.eventType === filter);
   const list = [...shown].reverse();
@@ -986,14 +1070,22 @@ function Ledger({ audit }: { audit: ApiAuditEvent[] }) {
 
       <div className="grid2" style={{ marginBottom: 16, alignItems: "start" }}>
         <div className="card pad">
-          <div className="sect-t" style={{ marginBottom: 12 }}><span className="seal-dot" style={{ position: "relative", top: 0 }} /> Granted scopes — read + one draft write</div>
-          {SCOPES_GRANTED.map((x) => (
-            <div className="scope grant" key={x.s}>
-              <span className="sc-name" style={{ color: x.s === "accounting.invoices" ? "var(--pine)" : "var(--txt)" }}>{x.s}</span>
-              {x.s === "accounting.invoices" ? <span className="tag draft">WRITE · draft only</span> : <span className="tag read">read</span>}
-              <span className="sc-why">{x.why}</span>
+          <div className="sect-t" style={{ marginBottom: 12 }}>
+            <span className="seal-dot" style={{ position: "relative", top: 0, ...(xero?.connected ? {} : { background: "var(--clay)" }) }} />
+            {xero?.connected
+              ? <>Granted scopes — decoded live from {xero.tenantName}&apos;s token</>
+              : <>Granted scopes — connect Xero to read the live token</>}
+          </div>
+          {(xero?.connected ? liveScopes : SCOPES_GRANTED.map((x) => x.s)).map((s) => (
+            <div className="scope grant" key={s}>
+              <span className="sc-name" style={{ color: s === "accounting.invoices" ? "var(--pine)" : "var(--txt)" }}>{s}</span>
+              {s === "accounting.invoices" ? <span className="tag draft">WRITE · draft only</span> : <span className="tag read">read</span>}
+              <span className="sc-why">{SCOPE_WHY[s] ?? SCOPES_GRANTED.find((x) => x.s === s)?.why ?? ""}</span>
             </div>
           ))}
+          {xero?.connected && (
+            <p className="subtle" style={{ marginTop: 10, fontSize: 12.5 }}>These are the access token&apos;s own <span className="mono">scope</span> claims — proof of the actual grant, not a screenshot of what was requested.</p>
+          )}
         </div>
         <div className="card pad">
           <div className="sect-t" style={{ marginBottom: 12 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--clay)", display: "inline-block" }} /> Deliberately omitted — money movement</div>
@@ -1043,9 +1135,10 @@ export default function ShortStayApp() {
   const [tab, setTab] = useState<TabKey>("overview");
   const [statements, setStatements] = useState<Record<string, ApiStatement | undefined>>({});
   const [auditEvents, setAuditEvents] = useState<ApiAuditEvent[]>([]);
+  const [xero, setXero] = useState<ApiXeroStatus | null>(null);
 
   const refresh = React.useCallback(async () => {
-    const [stmtResults, auditRes] = await Promise.all([
+    const [stmtResults, auditRes, xeroRes] = await Promise.all([
       Promise.all(
         LANDLORD_IDS.map(async (lid) => {
           try {
@@ -1058,9 +1151,11 @@ export default function ShortStayApp() {
         })
       ),
       fetch("/api/audit?limit=200").then((r) => (r.ok ? r.json() : { events: [] })).catch(() => ({ events: [] })),
+      fetch("/api/xero/status").then((r) => (r.ok ? r.json() : { connected: false })).catch(() => ({ connected: false })),
     ]);
     setStatements(Object.fromEntries(stmtResults));
     setAuditEvents((auditRes as { events: ApiAuditEvent[] }).events ?? []);
+    setXero(xeroRes as ApiXeroStatus);
   }, []);
 
   React.useEffect(() => {
@@ -1097,6 +1192,30 @@ export default function ShortStayApp() {
           ))}
         </nav>
         <div className="side-spacer" />
+        <div className="seal" style={{ marginBottom: 10 }}>
+          {xero?.connected ? (
+            <>
+              <div className="seal-top"><span className="seal-dot" /> {xero.tenantName}</div>
+              <div className="seal-txt">
+                Live Xero connection · {xero.grantedScopes?.filter((s) => s.startsWith("accounting.")).length ?? 0} accounting scopes
+                {typeof xero.expiresAt === "number" && <> · token ~{Math.max(0, Math.round((xero.expiresAt - Date.now()) / 60_000))} min</>}
+                <div style={{ marginTop: 8 }}>
+                  <a className="focusable" href="/api/auth/disconnect" style={{ color: "#CFded6", fontSize: 11, textDecoration: "underline" }}>Disconnect</a>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="seal-top"><span className="seal-dot" style={{ background: "var(--clay)", boxShadow: "0 0 0 4px rgba(158,74,52,.18)" }} /> Xero not connected</div>
+              <div className="seal-txt">
+                Reads and drafts need a live org.
+                <div style={{ marginTop: 8 }}>
+                  <a className="focusable" href="/api/auth/connect" style={{ display: "inline-block", background: "var(--pine2)", color: "#fff", fontWeight: 600, fontSize: 12, padding: "7px 12px", borderRadius: 8, textDecoration: "none" }}>Sign in with Xero →</a>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
         <div className="seal">
           <div className="seal-top"><span className="seal-dot" /> Never moves money</div>
           <div className="seal-txt">ShortStay can <b>read</b> and <b>draft</b>. It holds no payment scope, writes no <b>Payment</b> or <b>transfer</b>, and logs every action. You approve every payout.</div>
@@ -1104,11 +1223,11 @@ export default function ShortStayApp() {
       </aside>
 
       <main className="main">
-        {tab === "overview" && <Overview statements={statements} go={setTab} />}
-        {tab === "capture" && <Capture audit={auditEvents} onLedgerChange={() => void refresh()} />}
+        {tab === "overview" && <Overview statements={statements} xero={xero} go={setTab} />}
+        {tab === "capture" && <Capture audit={auditEvents} xeroConnected={!!xero?.connected} onLedgerChange={() => void refresh()} />}
         {tab === "statements" && <Statements statements={statements} onRefresh={() => void refresh()} />}
         {tab === "reconcile" && <Reconcile onLedgerChange={() => void refresh()} />}
-        {tab === "ledger" && <Ledger audit={auditEvents} />}
+        {tab === "ledger" && <Ledger audit={auditEvents} xero={xero} />}
       </main>
     </div>
   );
