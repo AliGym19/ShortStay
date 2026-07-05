@@ -10,7 +10,11 @@ import {
 export const AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize";
 export const TOKEN_URL = "https://identity.xero.com/connect/token";
 export const CONNECTIONS_URL = "https://api.xero.com/connections";
-export const REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+// Must exactly match a redirect URI registered on the Xero app. Hosted
+// deployments set XERO_REDIRECT_URI (e.g. https://<domain>/api/auth/callback)
+// and register that URL at developer.xero.com; local dev needs neither.
+export const REDIRECT_URI =
+  process.env.XERO_REDIRECT_URI ?? "http://localhost:3000/api/auth/callback";
 
 // Never-moves-money scope set: one write scope (accounting.invoices, for
 // draft ACCPAY bills only — enforced by the guard in lib/xero.ts), no payment
