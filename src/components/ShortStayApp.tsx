@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { logout } from "@/app/actions";
 
 /* ============================================================================
    ShortStay — Xero back office for Booking.com short-let agencies
@@ -57,7 +58,8 @@ const Style = () => (
     color:#AEBEDF;padding:10px 12px;border-radius:9px;font-size:14.5px;font-weight:500;transition:.15s}
   .nav-b:hover{background:rgba(255,255,255,.05);color:#EAF0FB}
   .nav-b.on{background:var(--pine2);color:#fff}
-  .nav-b .ico{width:17px;height:17px;flex:0 0 17px;opacity:.9}
+  .ico{width:17px;height:17px;flex:0 0 17px}
+  .nav-b .ico{opacity:.9}
   .nav-b .pip{margin-left:auto;background:var(--amber);color:#231a08;font-size:11px;font-weight:700;
     border-radius:20px;padding:1px 7px;font-family:'Space Mono'}
   .side-spacer{flex:1}
@@ -86,6 +88,29 @@ const Style = () => (
   .kpi .big{font-size:30px;font-weight:700;letter-spacing:-.03em;margin-top:9px;color:var(--ink)}
   .kpi .foot{font-size:12px;color:var(--faint);margin-top:5px}
   .kpi .stripe{position:absolute;left:0;top:0;bottom:0;width:3px}
+  .kpi .anim{position:absolute;right:18px;top:16px;width:56px;height:44px}
+
+  /* KPI micro-animations — muted white/blue/green/red, CSS-driven */
+  .a-bars{display:flex;align-items:flex-end;gap:5px;height:100%;justify-content:flex-end}
+  .a-bars span{width:8px;border-radius:3px;background:#2B55C4;opacity:.75;animation:barrise 2.6s ease-in-out infinite}
+  .a-bars span:nth-child(1){height:40%;animation-delay:0s}
+  .a-bars span:nth-child(2){height:65%;animation-delay:.3s}
+  .a-bars span:nth-child(3){height:90%;animation-delay:.6s}
+  @keyframes barrise{0%,100%{transform:scaleY(.75)}50%{transform:scaleY(1)}}
+  .a-bars span{transform-origin:bottom}
+
+  .a-spark{width:100%;height:100%}
+  .a-spark path{stroke:#3E7D5E;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round;
+    stroke-dasharray:90;stroke-dashoffset:90;animation:sparkdraw 3.2s ease-out infinite}
+  .a-spark circle{fill:#3E7D5E;opacity:0;animation:sparkdot 3.2s ease-out infinite}
+  @keyframes sparkdraw{0%{stroke-dashoffset:90}45%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+  @keyframes sparkdot{0%,40%{opacity:0}50%,85%{opacity:.9}100%{opacity:0}}
+
+  .a-gate{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:10px}
+  .a-gate .core{width:12px;height:12px;border-radius:50%;background:#9E4A34;opacity:.85}
+  .a-gate .ring{position:absolute;right:4px;width:24px;height:24px;border-radius:50%;border:2px solid #9E4A34;
+    animation:gatepulse 2.2s ease-out infinite}
+  @keyframes gatepulse{0%{transform:scale(.5);opacity:.7}80%{transform:scale(1.5);opacity:0}100%{opacity:0}}
 
   .tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;letter-spacing:.01em;white-space:nowrap}
   .tag.src{background:var(--sand);color:#5c5a48;font-family:'Space Mono';font-weight:400;font-size:10.5px}
@@ -159,8 +184,34 @@ const Style = () => (
   .scope.omit .sc-name{color:var(--clay);text-decoration:line-through;text-decoration-thickness:1.5px}
   .scope .sc-why{margin-left:auto;color:var(--muted);font-size:11.5px;text-align:right}
 
-  .callout{background:var(--pine-soft);border:1px solid #CFE0D6;border-radius:12px;padding:15px 18px;font-size:13.5px;line-height:1.55;color:#23392F}
+  .callout{background:var(--pine-soft);border:1px solid #C7D6F4;border-radius:12px;padding:15px 18px;font-size:13.5px;line-height:1.55;color:#1C2C52}
   .callout b{font-weight:600}
+
+  /* ---- policy accordion ---- */
+  .policy details{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--surface)}
+  .policy summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:13px;font-family:'Space Grotesk';color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
+  .policy summary::before{content:"+";font-family:'Space Mono';color:var(--pine2);font-weight:700}
+  .policy details[open] summary::before{content:"−"}
+  .policy .pbody{padding:2px 14px 13px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+  .policy .pbody b{color:var(--txt);font-weight:600}
+
+  /* ---- sidebar logout ---- */
+  .logout-b{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;
+    background:var(--pine2);color:#fff;border:none;border-radius:9px;padding:10px 12px;
+    font-size:14px;font-weight:600;transition:.15s}
+  .logout-b:hover{background:var(--pine)}
+
+  /* ---- agents timeline ---- */
+  .wf{border-left:2px solid var(--line);margin-left:8px;padding-left:18px;position:relative}
+  .wf-step{position:relative;padding:7px 0 9px}
+  .wf-step::before{content:"";position:absolute;left:-24px;top:12px;width:9px;height:9px;border-radius:50%;
+    background:#2B55C4;border:2px solid var(--surface);box-shadow:0 0 0 1.5px #2B55C4}
+  .wf-step.done::before{background:#3E7D5E;box-shadow:0 0 0 1.5px #3E7D5E}
+  .wf-step.gated::before{background:#fff;box-shadow:0 0 0 1.5px #9E4A34}
+  .wf-step .ws-t{font-size:13px;color:var(--txt);font-weight:500}
+  .wf-step .ws-m{font-size:11.5px;color:var(--faint);font-family:'Space Mono';margin-top:2px}
+  .wf-gate-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;border-radius:5px;
+    padding:1.5px 7px;background:var(--clay-soft);color:#7d3a28;margin-left:8px;letter-spacing:.03em}
 
   .topbar-m{display:none}
   @media (max-width:860px){
@@ -198,7 +249,7 @@ interface CodedFields {
   code: string; accName: string; propId: string; propName: string;
   confidence: number; note?: string;
 }
-type TabKey = "overview" | "capture" | "statements" | "reconcile" | "ledger";
+type TabKey = "overview" | "capture" | "statements" | "reconcile" | "agents" | "ledger";
 
 /* ------------------------------------------------------- API contracts ---- */
 interface ApiStatementLine {
@@ -386,6 +437,7 @@ const I: Record<string, React.ReactElement> = {
   capture: <path d="M4 4h16v13H4zM8 21h8M9 9h6M9 12h4" />,
   statements: <path d="M6 2h9l5 5v15H6zM15 2v5h5M9 12h7M9 16h7M9 8h3" />,
   reconcile: <path d="M3 7h13l-3-3M21 17H8l3 3M4 7v3M20 17v-3" />,
+  agents: <path d="M9 3v3M15 3v3M5 6h14v13H5zM9 11h.01M15 11h.01M9 15.5h6" />,
   ledger: <path d="M4 3h13a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5a2 2 0 0 1 2-2zM8 8h8M8 12h6" />,
 };
 const Ico = ({ d, cls = "ico" }: { d: React.ReactElement; cls?: string }) => (
@@ -436,13 +488,29 @@ function codeReceiptFallback(text: string): CodedReceipt & { _fallback: true } {
 }
 
 /* ============================================================ components == */
-function KPI({ lab, big, foot, color, icon }: {
-  lab: string; big: string; foot: string; color: string; icon: React.ReactNode;
+type KpiAnim = "bars" | "spark" | "gate";
+
+function KPI({ lab, big, foot, color, anim }: {
+  lab: string; big: string; foot: string; color: string; anim: KpiAnim;
 }) {
   return (
     <div className="kpi">
       <div className="stripe" style={{ background: color }} />
-      <div className="lab">{icon}{lab}</div>
+      <div className="anim" aria-hidden>
+        {anim === "bars" && (
+          <div className="a-bars"><span /><span /><span /></div>
+        )}
+        {anim === "spark" && (
+          <svg className="a-spark" viewBox="0 0 56 44">
+            <path d="M4 36 L18 24 L28 30 L52 8" />
+            <circle cx="52" cy="8" r="3" />
+          </svg>
+        )}
+        {anim === "gate" && (
+          <div className="a-gate"><span className="ring" /><span className="core" /></div>
+        )}
+      </div>
+      <div className="lab">{lab}</div>
       <div className="big num">{big}</div>
       <div className="foot">{foot}</div>
     </div>
@@ -485,17 +553,12 @@ function Overview({ statements, xero, go }: {
     <>
       <div className="head">
         <div className="eyebrow">June 2026 · month to date{xero?.connected ? ` · live from ${xero.tenantName}` : " · Xero disconnected"}</div>
-        <h1 className="h-title">The paperwork runs itself.<br />You approve every payout.</h1>
-        <p className="h-sub">Booking revenue and costs are read from Xero, coded to the right property, and assembled into a landlord-ready P&amp;L. ShortStay drafts and flags — it never sends money.</p>
       </div>
 
       <div className="grid3" style={{ marginBottom: 16 }}>
-        <KPI lab="Owed to landlords" big={owed} foot={`Across ${loaded.length || "…"} landlords · awaiting your approval`} color="var(--pine)"
-          icon={<Ico d={<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />} cls="ico" />} />
-        <KPI lab="Agency earned" big={earned} foot="Management fee, 12% of gross bookings" color="var(--teal)"
-          icon={<Ico d={<path d="M3 3v18h18M7 15l4-4 3 3 5-6" />} cls="ico" />} />
-        <KPI lab="Held for approval" big={String(pending)} foot={`${owed} in statements · live from the gate`} color="var(--amber)"
-          icon={<Ico d={<path d="M12 8v5M12 16h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />} cls="ico" />} />
+        <KPI lab="Owed to landlords" big={owed} foot={`Across ${loaded.length || "…"} landlords · awaiting your approval`} color="#2B55C4" anim="bars" />
+        <KPI lab="Agency earned" big={earned} foot="Management fee, 12% of gross bookings" color="#3E7D5E" anim="spark" />
+        <KPI lab="Held for approval" big={String(pending)} foot={`${owed} in statements · live from the gate`} color="#9E4A34" anim="gate" />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -629,9 +692,9 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
   return (
     <>
       <div className="head">
-        <div className="eyebrow">Step 1 · the agent does the admin</div>
+        <div className="eyebrow">The agent does the admin</div>
         <h1 className="h-title">Code a receipt into a draft bill</h1>
-        <p className="h-sub">Drop the supplier receipt. Claude reads it, extracts the figures, picks the account and the property, and creates a <b>draft</b> ACCPAY bill in Xero. You confirm before anything is written.</p>
+        <p className="h-sub">Claude will read and extract figures from invoices and create a draft bill in Xero for you.</p>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -766,6 +829,28 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
         ))}
         <p className="subtle" style={{ marginTop: 10, fontSize: 12.5 }}>No <span className="mono">payment.*</span> event exists in the vocabulary — coding a cost can never become paying one.</p>
       </div>
+
+      <div style={{ marginTop: 16 }} className="card pad policy">
+        <div className="sect-t" style={{ marginBottom: 10 }}>Money handling — policy, rights &amp; terms</div>
+        <details>
+          <summary>Money-handling policy</summary>
+          <div className="pbody">
+            ShortStay <b>never initiates, authorises, or transmits payments</b>. Its single write capability is creating a <b>DRAFT purchase bill</b> in Xero — a document, not a transaction. The OAuth grant excludes every payment scope (<span className="mono">accounting.payments</span>, bank-transaction writes, <span className="mono">paymentservices</span>), so payment endpoints return 403 by construction. A software guard additionally refuses any non-whitelisted API call before network traffic occurs, and every action is recorded in an append-only audit log whose vocabulary contains no payment or transfer event type.
+          </div>
+        </details>
+        <details>
+          <summary>Your rights</summary>
+          <div className="pbody">
+            Every figure shown traces to its source — a Xero invoice, a bank transaction, or a computation you can inspect. <b>Nothing is approved without you</b>: statements are held behind a human approval gate, and approval itself moves no money — it only records your authorisation to pay from Xero yourself. You may revoke ShortStay&apos;s access at any time from Xero&apos;s <b>Connected apps</b> settings, and request the audit log for any decision.
+          </div>
+        </details>
+        <details>
+          <summary>Terms &amp; conditions (demo)</summary>
+          <div className="pbody">
+            This is a prototype operating against a Xero demo organisation for evaluation. It does not provide financial, tax, or accounting advice. Drafted bills require human review in Xero before any payment is made. Extracted figures are AI-generated and shown with a confidence score — verify before approving. No liability is accepted for decisions made on unverified drafts.
+          </div>
+        </details>
+      </div>
     </>
   );
 }
@@ -867,7 +952,7 @@ function Statements({ statements, onRefresh }: {
   return (
     <>
       <div className="head">
-        <div className="eyebrow">Step 2 · the demo climax</div>
+        <div className="eyebrow">Monthly statements</div>
         <h1 className="h-title">Per-landlord monthly statement</h1>
         <p className="h-sub">Revenue in, commission and fee and costs out, owed to landlord — every line traceable to its Xero source. This is the landlord&apos;s tax document and your value in one artifact. It is never auto-sent.</p>
       </div>
@@ -1149,6 +1234,100 @@ function Ledger({ audit, xero }: { audit: ApiAuditEvent[]; xero: ApiXeroStatus |
   );
 }
 
+/* ---- agents ---- */
+interface WorkflowStep {
+  text: string;
+  meta: string;
+  state: "done" | "gated";
+}
+interface AgentWorkflow {
+  id: string;
+  title: string;
+  agent: string;
+  when: string;
+  outcome: string;
+  steps: WorkflowStep[];
+}
+
+const AGENT_WORKFLOWS: AgentWorkflow[] = [
+  {
+    id: "wf-triage-0704",
+    title: "Tenant WhatsApp report → emergency plumber triaged",
+    agent: "agent:triage-runner",
+    when: "Fri 07:42",
+    outcome: "Resolved · bill drafted after your approval",
+    steps: [
+      { text: "Extracted maintenance report from WhatsApp", meta: "tenant · Dockside Loft · “water pooling under the sink”", state: "done" },
+      { text: "Understood the problem", meta: "classified plumbing · severity high · respond within 4h", state: "done" },
+      { text: "Shortlisted approved contractors, requested a callout quote", meta: "Rapid Flow Plumbing Ltd · £240 inc. VAT", state: "done" },
+      { text: "Asked you before committing to the callout", meta: "approved by you · 08:05", state: "gated" },
+      { text: "Coded the invoice and drafted the ACCPAY bill in Xero", meta: "bill.drafted · 473 Repairs & Maintenance · DRAFT", state: "done" },
+    ],
+  },
+  {
+    id: "wf-statement-0703",
+    title: "Landlord email → June statement assembled",
+    agent: "agent:statement-runner",
+    when: "Thu 16:20",
+    outcome: "Held at the gate · awaiting your approval",
+    steps: [
+      { text: "Extracted query from email", meta: "Amara Okafor · “when is my June payout?”", state: "done" },
+      { text: "Assembled the June statement from live Xero reads", meta: "statement.assembled · every line source-tagged", state: "done" },
+      { text: "Ran the guards", meta: "no-money-movement allow · completeness allow", state: "done" },
+      { text: "Stopped for your approval — the reply is drafted, never auto-sent", meta: "human gate · statement.held until you decide", state: "gated" },
+    ],
+  },
+  {
+    id: "wf-reconcile-0627",
+    title: "Booking.com payout → reconciled to the penny",
+    agent: "agent:reconciler",
+    when: "27 Jun",
+    outcome: "Matched 6/6 · no approval needed (read-only)",
+    steps: [
+      { text: "Read the lump-sum RECEIVE bank transaction", meta: "£4,284.00 · Booking.com", state: "done" },
+      { text: "Matched it to bookings by deterministic rule", meta: "payout = Σ(gross × 0.85) ±1p · 6 of 6", state: "done" },
+      { text: "Recorded the split per property", meta: "payout.matched · feeds statement revenue lines", state: "done" },
+    ],
+  },
+];
+
+function Agents() {
+  return (
+    <>
+      <div className="head">
+        <div className="eyebrow">Pre-prompted agents · sample workflows</div>
+        <h1 className="h-title">Recent agent runs</h1>
+        <p className="h-sub">Each agent works a fixed playbook: extract, understand, act — and at every critical step, stop and ask you. Approval is a human-gated decision recorded in the audit log; no agent can move money.</p>
+      </div>
+
+      {AGENT_WORKFLOWS.map((wf) => (
+        <div className="card" key={wf.id} style={{ marginBottom: 14 }}>
+          <div className="pad" style={{ paddingBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div className="sect-t">{wf.title}</div>
+              <div className="subtle" style={{ marginTop: 4, fontFamily: "'Space Mono', monospace", fontSize: 11.5 }}>{wf.agent} · {wf.when}</div>
+            </div>
+            <span className="tag read">{wf.outcome}</span>
+          </div>
+          <div className="pad" style={{ paddingTop: 0 }}>
+            <div className="wf">
+              {wf.steps.map((s, i) => (
+                <div className={`wf-step ${s.state}`} key={i}>
+                  <div className="ws-t">
+                    {s.text}
+                    {s.state === "gated" && <span className="wf-gate-chip">HUMAN GATE</span>}
+                  </div>
+                  <div className="ws-m">{s.meta}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /* ================================================================= app ==== */
 export default function ShortStayApp() {
   const [tab, setTab] = useState<TabKey>("overview");
@@ -1188,6 +1367,7 @@ export default function ShortStayApp() {
     ["capture", "Capture", I.capture, 1],
     ["statements", "Statements", I.statements],
     ["reconcile", "Reconcile", I.reconcile],
+    ["agents", "Agents", I.agents],
     ["ledger", "Ledger & trust", I.ledger],
   ];
 
@@ -1199,7 +1379,7 @@ export default function ShortStayApp() {
           <Mark />
           <div>
             <div className="brand-name">ShortStay</div>
-            <div className="brand-sub">Xero back office · short-lets</div>
+            <div className="brand-sub">Xero back office</div>
           </div>
         </div>
         <nav className="nav">
@@ -1235,10 +1415,9 @@ export default function ShortStayApp() {
             </>
           )}
         </div>
-        <div className="seal">
-          <div className="seal-top"><span className="seal-dot" /> Never moves money</div>
-          <div className="seal-txt">ShortStay can <b>read</b> and <b>draft</b>. It holds no payment scope, writes no <b>Payment</b> or <b>transfer</b>, and logs every action. You approve every payout.</div>
-        </div>
+        <form action={logout}>
+          <button type="submit" className="logout-b focusable">Log out</button>
+        </form>
       </aside>
 
       <main className="main">
@@ -1246,6 +1425,7 @@ export default function ShortStayApp() {
         {tab === "capture" && <Capture audit={auditEvents} xeroConnected={!!xero?.connected} onLedgerChange={() => void refresh()} />}
         {tab === "statements" && <Statements statements={statements} onRefresh={() => void refresh()} />}
         {tab === "reconcile" && <Reconcile onLedgerChange={() => void refresh()} />}
+        {tab === "agents" && <Agents />}
         {tab === "ledger" && <Ledger audit={auditEvents} xero={xero} />}
       </main>
     </div>
