@@ -1,108 +1,47 @@
-# FIRST: verify the frontend-merge branch (unverified WIP)
+# Demo day (2026-07-05) — state as of ~08:25
 
-Since this file was written, a lot changed — read this section before the
-"Sunday demo day" plan below, which predates it.
+All build phases shipped on `frontend-merge` (6 commits tonight, NOT pushed).
+The pasted v1.0 spec's features are live on the kept architecture — see
+decisions.md "v1.0 spec reconciled" for what was deliberately not migrated.
 
-**What happened**: Michal Kups (MRKups) is a known collaborator pushing
-directly to `main` in parallel. His docs commit briefly broke `README.md`
-with unresolved conflict markers (fixed, pushed). Separately, Ali supplied a
-second, independently-built Next.js frontend (`shortstay-next.zip` —
-polished UI, mock data, landlord/property/fee-split domain model, its own
-auth stub) to merge with tonight's backend. That merge is in progress on
-branch **`frontend-merge`**, committed but **not pushed and not verified —
-the dev server was never restarted to confirm it actually runs.**
+## What's proven (server-side, against live Xero Demo Company)
 
-**Do this first, in order**:
-1. `git checkout frontend-merge`, `pnpm install`, `rm -rf .next`, `pnpm dev`.
-2. Click through: `/` → redirects to `/login`. "Continue in demo mode" →
-   `/dashboard` renders landlord/finance/approvals panels (mock data) AND
-   the Xero connection panel (`src/components/XeroDataPanel.tsx`) below them.
-3. Disconnect any demo state, click "Sign In with Xero" → real OAuth flow
-   (`src/app/api/auth/connect`) → consent → back on `/dashboard` with real
-   Demo Company data in the Xero panel, granted-scope chips correct.
-4. `curl localhost:3000/api/dev/guard-test` — still 4/4 passing (guard code
-   didn't change, but confirm the move didn't break the route).
-5. Try `add-records` for an `invoice` or `repair` type with a supplier name
-   that exactly matches a real Xero contact (e.g. "Basket Shop") — confirm
-   a draft ACCPAY bill appears in Xero. A non-matching name should surface
-   `xeroNote` explaining no contact was found, not fail silently.
-6. If all of the above passes: merge `frontend-merge` → `main`, push.
-   If something's broken: fix on the branch, do NOT push straight to `main`
-   (that's what caused MRKups' broken-README incident tonight).
+- Bill test: POST /api/draft-bill wrote a real DRAFT ACCPAY bill
+  (InvoiceID 80a36616-025e-4f00-8d95-950800ce65ea, supplier "Basket Shop"),
+  read back DRAFT, audit-chained. Tracking warning surfaced (org has no
+  Property category yet — §9 seeding is optional polish).
+- LLM coding live via OpenRouter: plumbing receipt → 473/P1 @ 0.95.
+- Statements: L1 £5,818.10 / L2 £2,395.30 owed (no Xero costs matched yet —
+  bills drafted tonight are dated June so they WILL appear as cost lines
+  on reassembly if statuses stay DRAFT/SUBMITTED/AUTHORISED).
+- Gate: blanked sourceId → 409 held (completeness pause); send-payment →
+  escalate; approve → assembled → guard.evaluated → statement.approved chain.
+- Reconcile: 6/6 bookings, 428400p exact, payout.matched audited.
+- Guard-test 9/9 (GET whitelist + POST cases). Vocabulary enforced.
 
-**Known placeholders in the merge, not bugs**:
-- Landlord/property/fee data is still 100% mock (`src/lib/data/mock.ts`) —
-  no real backend. Deferred to future Supabase work (Ali: "defer for later
-  supabase table work, make sure its xero compatible" — the seam is
-  `Landlord.xeroContactId` / `Approval.xeroContactId` / `.xeroInvoiceId` in
-  `src/lib/types.ts`, all optional, unwired).
-- `add-records/actions.ts`'s Xero contact matching is exact-name-match
-  against `getContacts()` — a stopgap to prove the write path, not a real
-  identity system. Real linking needs the Supabase table above.
-- Draft-bill account code is hardcoded to `"429"` in `draftBill()` —
-  needs a real category→account-code mapping eventually.
-- `docs/`, `AGENTS.md`, `CLAUDE.md` describe tonight's *backend* accurately
-  but do not yet reflect the frontend merge (new routes, new components,
-  the session-bridge). Update them once the merge is verified and lands.
+## Human TODO before demo (in order)
 
----
+1. Log in (demo mode or real OAuth) and click through all five tabs —
+   the UI was wired at ~00:30 and NEVER eyeballed (screenshots blocked by
+   a Chrome-extension/dev-server quirk; only network/console verified).
+2. Offline test (acceptance §2): unset OPENROUTER_API_KEY, restart dev,
+   code a receipt → must fall back with "offline matcher" tag.
+3. Verify the "View in Xero" deep link URL shape on the drafted bill
+   (spec flags it unverified — falls back to Bills list if wrong).
+4. Merge frontend-merge → main and push (Ali only).
+5. Optional Xero seeding (spec §9): Property tracking category + Booking.com
+   contact + RECEIVE payouts — makes statements/reconcile fully live-sourced.
+6. Demo script: spec §12 order. The escalate path (actionKind send-payment
+   → 409) is a strong judges' moment; curl it live.
 
-# Next session — Sunday demo day, 08:00 start, features freeze 15:00
+## Known rough edges (deliberate, not bugs)
 
-Order matters — each item depends on the one before it being live.
-
-## 1. FinanceChart
-`GET /Reports/ProfitAndLoss?periods=11&timeframe=MONTH` through `xeroFetch`
-(scope already granted: `accounting.reports.profitandloss.read`). Recharts
-`AreaChart`. **Month | Year** toggles only — **no Day toggle**: P&L has no
-daily periods, don't build a control for data that can't exist. If step 5's
-optional P&L capture ran, start from `.brain/pnl-shape.json` instead of
-re-discovering the response shape live.
-
-## 2. Triage: intake → classify → stage → approvals queue
-Uses tonight's seeded prompts (`issue-classifier` tier:everyday,
-`action-stager` tier:judgment — `lib/prompt-registry.ts`,
-`lib/llm.ts`/`router`) and tonight's `approvals` table (`lib/schema.ts`).
-Flow per `docs/triage-v1.md`: manual intake form → `router.completeStructured`
-classify → `router.completeStructured` stage → insert into `approvals`
-(status `pending`) → queue UI sorted by severity. Every step appends an
-`audit.append` (classify and stage already do, via `lib/llm.ts`'s
-`llm.completed`; the approvals insert itself should too, parented to the
-staging `llm.completed` event id — this is the chain `lib/audit.ts:chain()`
-exists to prove).
-
-## 3. Approve → draft-bill wiring
-Wires the write path proved in tonight's step 2 (`xeroFetch` POST /Invoices,
-guard in `lib/xero.ts`) to an "Approve" action on an `approvals` row where
-`kind` implies a bill (e.g. `contact-contractor`/`draft-bill` stager output
-with a non-null `accountCode`). On approve: `xeroFetch` the draft (Type
-ACCPAY, Status DRAFT explicit — same shape as tonight's proof), then update
-the `approvals` row (`status: "approved"`, `decidedBy`, `decidedAt`,
-`auditEventId` of a new `approval.decided` audit event parented to the
-original staging event). **No auto-approve, no batch-approve** — one human
-click per bill, matching the never-moves-money invariant's "human-gated"
-half (the guard covers the other half).
-
-## 4. PortfolioList + TopBar stubs
-Layout scaffolding only — property list placeholder, top nav bar. Do not
-over-build; these are stubs for Sunday's demo flow to have somewhere to live,
-not a real property-management feature.
-
-## Freeze
-**15:00 — features freeze.** Whatever is demo-able at that point is what
-demos. Do not start item 5 (there is no item 5 tonight) or scope-creep any
-of 1–4 past their stated shape.
-
-## Carried from tonight (2026-07-04)
-- Demo Company auto-resets ~every 28 days — if invoices/contacts look
-  different Sunday, that's why, not a regression.
-- Tier map is `anthropic/claude-haiku-4.5` (everyday) /
-  `anthropic/claude-opus-4.8` (judgment) — both verified live on
-  OpenRouter's catalogue. If either 404s Sunday (catalogue churn),
-  `verifyTierModels()` in `lib/llm.ts` returns the current `anthropic/*`
-  list — pick from that, don't guess.
-- Supabase is wired (`lib/supabase.ts`) but has zero tables/callers —
-  still not needed by anything built tonight. SQLite via Drizzle
-  (`lib/db.ts`) is what tonight's audit/prompts/approvals actually use.
-  Don't reach for Supabase Sunday unless a real need for hosted/shared
-  Postgres shows up (e.g. multi-device demo access).
+- Reconcile tab's booking table is the local mirror of the seeds; the match
+  itself is server-side. Fine for demo.
+- properties.landlordContactId is "local:L1/L2" — swap for real ContactIDs
+  only if statement-by-contact matters live.
+- Session cookie expired once mid-session; demo-mode login is one click.
+- LLM receipt coding of "RAPID FLOW PLUMBING LTD" → supplier won't match a
+  Demo Company contact → needsContact 422 (correct behaviour). For the
+  live bill moment, edit the receipt's first line to a real contact name
+  (e.g. "Basket Shop") before drafting, or create the supplier in Xero.
