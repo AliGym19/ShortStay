@@ -83,7 +83,20 @@ export default function BookPage() {
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, flexWrap: "wrap", gap: 10 }}>
                 <div style={{ fontSize: 14 }}>{nights} night{nights > 1 ? "s" : ""} × £{prop.rate} = <b style={{ fontSize: 17 }}>£{total.toFixed(2)}</b></div>
-                <button onClick={() => setDone(true)} disabled={!guest.trim()}
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch("/api/bookings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ propertyId, guestName: guest, guestEmail: email, checkIn, nights, totalPence: Math.round(total * 100) }),
+                      });
+                    } catch {
+                      // POC: confirmation shows regardless; the queue write is best-effort
+                    }
+                    setDone(true);
+                  }}
+                  disabled={!guest.trim()}
                   style={{ background: "#1B3F9C", color: "#fff", border: "none", borderRadius: 999, padding: "11px 26px", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: guest.trim() ? 1 : 0.5 }}>
                   Request to book
                 </button>

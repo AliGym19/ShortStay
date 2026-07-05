@@ -88,6 +88,24 @@ export const reports = sqliteTable("reports", {
     .$defaultFn(() => new Date()),
 });
 
+// Guest booking requests from the public /book site — the intake end of the
+// booking → review → ACCREC invoice flow. invoiceId is set once ops raises
+// the sales invoice in Xero.
+export const bookingRequests = sqliteTable("booking_requests", {
+  id: text("id").primaryKey().$defaultFn(uuid),
+  propertyId: text("property_id").notNull(),
+  guestName: text("guest_name").notNull(),
+  guestEmail: text("guest_email"),
+  checkIn: text("check_in"),
+  nights: integer("nights").notNull(),
+  totalPence: integer("total_pence").notNull(),
+  status: text("status").notNull().default("requested"), // "requested" | "confirmed" | "declined"
+  invoiceId: text("invoice_id"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const approvals = sqliteTable("approvals", {
   id: text("id").primaryKey().$defaultFn(uuid),
   kind: text("kind").notNull(),

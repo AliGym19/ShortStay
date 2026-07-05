@@ -1618,6 +1618,49 @@ function ReportForm({ userName, onLedgerChange }: { userName: string; onLedgerCh
   );
 }
 
+interface ApiBookingRequest {
+  id: string;
+  propertyId: string;
+  guestName: string;
+  guestEmail: string | null;
+  checkIn: string | null;
+  nights: number;
+  totalPence: number;
+  status: string;
+  createdAt: number;
+}
+
+// Booking requests from the public /book site, surfaced in the ops view.
+// Raising the ACCREC invoice from a confirmed booking is the next step —
+// the queue makes the intake→review seam visible now.
+function BookingQueue() {
+  const [bookings, setBookings] = useState<ApiBookingRequest[]>([]);
+  React.useEffect(() => {
+    fetch("/api/bookings").then((r) => r.json()).then((d) => setBookings(d.bookings ?? [])).catch(() => setBookings([]));
+  }, []);
+  if (bookings.length === 0) return null;
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="pad" style={{ paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div className="sect-t">Booking requests · {bookings.filter((b) => b.status === "requested").length} new</div>
+        <span className="subtle" style={{ fontSize: 12 }}>from the public booking site</span>
+      </div>
+      {bookings.map((b) => (
+        <div key={b.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "11px 22px", borderTop: "1px solid #EDF1F8" }}>
+          <span style={{ width: 52, height: 36, borderRadius: 7, overflow: "hidden", flex: "0 0 52px" }}><PropThumb pid={b.propertyId} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500 }}>{b.guestName} · {propById(b.propertyId).name}</div>
+            <div className="subtle" style={{ fontSize: 11.5 }}>
+              {b.nights} night{b.nights > 1 ? "s" : ""}{b.checkIn ? ` from ${b.checkIn}` : ""} · {penceToMoney(b.totalPence)}{b.guestEmail ? ` · ${b.guestEmail}` : ""}
+            </div>
+          </div>
+          <span className={`tag ${b.status === "requested" ? "hold" : b.status === "confirmed" ? "approved" : "src"}`}>{b.status}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolean; onLedgerChange: () => void }) {
   const [reports, setReports] = useState<ApiReport[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -1686,6 +1729,8 @@ function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolea
         <h1 className="h-title">Field reports</h1>
         <p className="h-sub">Reports from the field team. Review, price the fix, and send the bill to Xero — the accountant signs it off.</p>
       </div>
+
+      <BookingQueue />
 
       {result && (
         <div className="callout" style={{ marginBottom: 14, ...(result.ok ? {} : { background: "var(--clay-soft)", borderColor: "var(--clay)" }) }}>
