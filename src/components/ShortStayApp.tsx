@@ -17,7 +17,7 @@ import type { Role } from "@/lib/permissions";
 /* ---------------------------------------------------------------- styles --- */
 const Style = () => (
   <style>{`
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Space+Mono:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
   /* HLB Intraconnect-style palette: white primary, deep blue accents.
      Semantic data colours (amber/teal/clay deductions, sage allow) kept —
@@ -30,19 +30,19 @@ const Style = () => (
     --teal:#3C6E63; --teal-soft:#E4EEEB;
     --clay:#9E4A34; --clay-soft:#F2E2DC;
     --sage:#3E7D5E; --sage-soft:#E4F0E9;
-    --shadow:0 1px 2px rgba(11,31,75,.05), 0 8px 24px -14px rgba(11,31,75,.18);
-    --radius:14px;
+    --shadow:0 1px 2px rgba(11,31,75,.04);
+    --radius:12px;
   }
   *{box-sizing:border-box}
   .ss-root{
-    font-family:'Instrument Sans',system-ui,sans-serif;
+    font-family:'Inter',system-ui,sans-serif;
     color:var(--txt); background:var(--paper);
     min-height:100vh; -webkit-font-smoothing:antialiased;
-    display:flex; letter-spacing:.005em;
+    display:flex; letter-spacing:0;
   }
-  .ss-root h1,.ss-root h2,.ss-root h3,.ss-root .disp{font-family:'Space Grotesk',sans-serif;}
-  .mono{font-family:'Space Mono',monospace; font-variant-numeric:tabular-nums;}
-  .num{font-family:'Space Mono',monospace; font-variant-numeric:tabular-nums; letter-spacing:-.02em;}
+  .ss-root h1,.ss-root h2,.ss-root h3,.ss-root .disp{font-family:'Inter',sans-serif;font-weight:650}
+  .mono{font-family:'Inter',sans-serif; font-variant-numeric:tabular-nums; font-size:.96em}
+  .num{font-family:'Inter',sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.01em; font-weight:600}
   button{font-family:inherit; cursor:pointer}
   ::selection{background:#D6E2F8}
   a{color:inherit}
@@ -52,7 +52,7 @@ const Style = () => (
     display:flex; flex-direction:column; padding:22px 16px; position:sticky; top:0; height:100vh;}
   .brand{display:flex; align-items:center; gap:10px; padding:2px 6px 18px;}
   .brand-mark{width:30px;height:30px;flex:0 0 30px}
-  .brand-name{font-family:'Space Grotesk';font-weight:700;font-size:19px;color:#fff;letter-spacing:-.01em}
+  .brand-name{font-family:'Inter';font-weight:700;font-size:19px;color:#fff;letter-spacing:-.01em}
   .brand-sub{font-size:11px;color:#8FA3CB;margin-top:1px;letter-spacing:.02em}
   .nav{display:flex;flex-direction:column;gap:2px;margin-top:6px}
   .nav-b{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;
@@ -62,11 +62,11 @@ const Style = () => (
   .ico{width:17px;height:17px;flex:0 0 17px}
   .nav-b .ico{opacity:.9}
   .nav-b .pip{margin-left:auto;background:var(--amber);color:#231a08;font-size:11px;font-weight:700;
-    border-radius:20px;padding:1px 7px;font-family:'Space Mono'}
+    border-radius:20px;padding:1px 7px;font-family:'Inter'}
   .side-spacer{flex:1}
   .seal{background:linear-gradient(180deg,#122A5E,#0E2350);border:1px solid #26407F;border-radius:12px;
     padding:13px 13px 12px;}
-  .seal-top{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk';font-weight:600;font-size:12.5px;color:#EAF0FB}
+  .seal-top{display:flex;align-items:center;gap:8px;font-family:'Inter';font-weight:600;font-size:12.5px;color:#EAF0FB}
   .seal-dot{width:7px;height:7px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 4px rgba(62,125,94,.18)}
   .seal-txt{font-size:11.5px;line-height:1.45;color:#93A5C8;margin-top:7px}
   .seal-txt b{color:#CFDCF2;font-weight:600}
@@ -114,13 +114,13 @@ const Style = () => (
   @keyframes gatepulse{0%{transform:scale(.5);opacity:.7}80%{transform:scale(1.5);opacity:0}100%{opacity:0}}
 
   .tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;letter-spacing:.01em;white-space:nowrap}
-  .tag.src{background:var(--sand);color:#5c5a48;font-family:'Space Mono';font-weight:400;font-size:10.5px}
+  .tag.src{background:var(--sand);color:#5c5a48;font-family:'Inter';font-weight:400;font-size:10.5px}
   .tag.draft{background:var(--amber-soft);color:#8a5a10}
   .tag.approved{background:var(--sage-soft);color:#2c5a41}
   .tag.read{background:var(--teal-soft);color:#2c5148}
   .tag.hold{background:var(--amber-soft);color:#8a5a10}
 
-  .sect-t{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--ink);font-family:'Space Grotesk';display:flex;align-items:center;gap:9px}
+  .sect-t{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--ink);font-family:'Inter';display:flex;align-items:center;gap:9px}
   .divider{height:1px;background:var(--line);margin:0}
 
   table.led{width:100%;border-collapse:collapse;font-size:13.5px}
@@ -132,12 +132,12 @@ const Style = () => (
   .subtle{color:var(--muted);font-size:12.5px}
 
   .btn{border:1px solid var(--pine);background:var(--pine);color:#fff;font-weight:600;font-size:14px;
-    padding:10px 18px;border-radius:10px;transition:.15s;display:inline-flex;align-items:center;gap:8px}
+    padding:10px 20px;border-radius:999px;transition:.15s;display:inline-flex;align-items:center;gap:8px}
   .btn:hover:not(:disabled){background:var(--pine2)}
   .btn:disabled{opacity:.42;cursor:not-allowed}
   .btn.ghost{background:transparent;color:var(--pine);border-color:var(--line)}
   .btn.ghost:hover:not(:disabled){border-color:var(--pine);background:var(--pine-soft)}
-  .btn.sm{padding:7px 13px;font-size:13px;border-radius:9px}
+  .btn.sm{padding:7px 15px;font-size:13px;border-radius:999px}
 
   .chip{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:6px 13px;font-size:13px;font-weight:500;color:var(--muted);transition:.15s}
   .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -146,10 +146,10 @@ const Style = () => (
   /* ---- capture ---- */
   .receipt{background:#FBFCFE;border:1px dashed var(--line);border-radius:12px;padding:0;overflow:hidden}
   .receipt textarea{width:100%;border:none;background:transparent;resize:vertical;min-height:210px;
-    font-family:'Space Mono';font-size:12.5px;line-height:1.7;color:#2C3A55;padding:18px 18px;outline:none}
+    font-family:'Inter';font-size:12.5px;line-height:1.7;color:#2C3A55;padding:18px 18px;outline:none}
   .field{display:flex;justify-content:space-between;align-items:baseline;padding:11px 2px;border-bottom:1px solid #F0EBDE;opacity:0;transform:translateY(4px);animation:fade .4s forwards}
   .field .fl{font-size:12.5px;color:var(--muted);font-weight:500}
-  .field .fv{font-family:'Space Mono';font-size:13.5px;color:var(--ink);font-weight:700}
+  .field .fv{font-family:'Inter';font-size:13.5px;color:var(--ink);font-weight:700}
   @keyframes fade{to{opacity:1;transform:none}}
   .spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
   .spinner.dk{border:2px solid var(--sand);border-top-color:var(--pine)}
@@ -158,18 +158,18 @@ const Style = () => (
   /* ---- bridge ---- */
   .bridge-track{display:flex;height:52px;border-radius:9px;overflow:hidden;border:1px solid var(--line);background:var(--sand)}
   .bridge-seg{transition:flex-basis .7s cubic-bezier(.2,.7,.2,1),width .7s;display:flex;align-items:center;justify-content:center;position:relative;min-width:2px}
-  .bridge-seg span{font-family:'Space Mono';font-size:11px;font-weight:700;color:#fff;padding:0 6px;white-space:nowrap;text-shadow:0 1px 1px rgba(0,0,0,.18)}
+  .bridge-seg span{font-family:'Inter';font-size:11px;font-weight:700;color:#fff;padding:0 6px;white-space:nowrap;text-shadow:0 1px 1px rgba(0,0,0,.18)}
   .legend{display:flex;flex-wrap:wrap;gap:14px 22px;margin-top:14px}
   .leg{display:flex;align-items:center;gap:8px;font-size:12.5px}
   .leg .sw{width:11px;height:11px;border-radius:3px;flex:0 0 11px}
-  .leg .lv{font-family:'Space Mono';font-weight:700;color:var(--ink)}
+  .leg .lv{font-family:'Inter';font-weight:700;color:var(--ink)}
   .leg .ll{color:var(--muted)}
 
   .gate{border-radius:12px;border:1px solid var(--line);overflow:hidden}
   .gate-h{padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
   .guard-line{display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 18px;border-top:1px solid #F0EBDE;flex-wrap:wrap}
   .guard-line .gd{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
-  .guard-line .gn{font-family:'Space Mono';font-size:12px;color:var(--muted)}
+  .guard-line .gn{font-family:'Inter';font-size:12px;color:var(--muted)}
   .guard-line .gr{margin-left:auto;font-size:12.5px;color:var(--muted)}
 
   /* ---- statements two-column: gate fills the right rail ---- */
@@ -192,14 +192,14 @@ const Style = () => (
 
   /* ---- audit ---- */
   .evt{display:grid;grid-template-columns:150px 1fr auto;gap:14px;align-items:center;padding:10px 4px;border-bottom:1px solid #F0EBDE;position:relative}
-  .evt .et{font-family:'Space Mono';font-size:12px;font-weight:700;color:var(--pine)}
+  .evt .et{font-family:'Inter';font-size:12px;font-weight:700;color:var(--pine)}
   .evt .em{font-size:13px;color:var(--txt)}
-  .evt .emeta{font-size:11.5px;color:var(--faint);margin-top:2px;font-family:'Space Mono'}
-  .evt .ets{font-family:'Space Mono';font-size:11px;color:var(--faint);white-space:nowrap}
+  .evt .emeta{font-size:11.5px;color:var(--faint);margin-top:2px;font-family:'Inter'}
+  .evt .ets{font-family:'Inter';font-size:11px;color:var(--faint);white-space:nowrap}
   .scope{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:8px;font-size:12.5px;margin-bottom:6px;border:1px solid var(--line)}
   .scope.grant{background:var(--surface)}
   .scope.omit{background:#FBF6F4;border-color:var(--clay-soft)}
-  .scope .sc-name{font-family:'Space Mono';font-size:12px;font-weight:700}
+  .scope .sc-name{font-family:'Inter';font-size:12px;font-weight:700}
   .scope.omit .sc-name{color:var(--clay);text-decoration:line-through;text-decoration-thickness:1.5px}
   .scope .sc-why{margin-left:auto;color:var(--muted);font-size:11.5px;text-align:right}
 
@@ -208,8 +208,8 @@ const Style = () => (
 
   /* ---- policy accordion ---- */
   .policy details{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--surface)}
-  .policy summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:13px;font-family:'Space Grotesk';color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
-  .policy summary::before{content:"+";font-family:'Space Mono';color:var(--pine2);font-weight:700}
+  .policy summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:13px;font-family:'Inter';color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
+  .policy summary::before{content:"+";font-family:'Inter';color:var(--pine2);font-weight:700}
   .policy details[open] summary::before{content:"−"}
   .policy .pbody{padding:2px 14px 13px;font-size:12.5px;line-height:1.6;color:var(--muted)}
   .policy .pbody b{color:var(--txt);font-weight:600}
@@ -228,7 +228,7 @@ const Style = () => (
   .wf-step.done::before{background:#3E7D5E;box-shadow:0 0 0 1.5px #3E7D5E}
   .wf-step.gated::before{background:#fff;box-shadow:0 0 0 1.5px #9E4A34}
   .wf-step .ws-t{font-size:13px;color:var(--txt);font-weight:500}
-  .wf-step .ws-m{font-size:11.5px;color:var(--faint);font-family:'Space Mono';margin-top:2px}
+  .wf-step .ws-m{font-size:11.5px;color:var(--faint);font-family:'Inter';margin-top:2px}
   .wf-gate-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;border-radius:5px;
     padding:1.5px 7px;background:var(--clay-soft);color:#7d3a28;margin-left:8px;letter-spacing:.03em}
 
@@ -1455,7 +1455,7 @@ function Agents() {
           <div className="pad" style={{ paddingBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
             <div>
               <div className="sect-t">{wf.title}</div>
-              <div className="subtle" style={{ marginTop: 4, fontFamily: "'Space Mono', monospace", fontSize: 11.5 }}>{wf.agent} · {wf.when}</div>
+              <div className="subtle" style={{ marginTop: 4, fontFamily: "'Inter', sans-serif", fontSize: 11.5 }}>{wf.agent} · {wf.when}</div>
             </div>
             <span className="tag read">{wf.outcome}</span>
           </div>
@@ -1939,7 +1939,7 @@ function ApprovalsTab({ onLedgerChange }: { onLedgerChange: () => void }) {
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.detail?.supplier} · {typeof a.detail?.grossInclVat === "number" ? money(a.detail.grossInclVat) : ""} · account {a.detail?.accountCode}</div>
                 <div className="subtle" style={{ fontSize: 12.5, marginTop: 3 }}>&ldquo;{a.detail?.reportDescription}&rdquo;</div>
-                <div className="subtle" style={{ fontSize: 11.5, marginTop: 4, fontFamily: "'Space Mono', monospace" }}>
+                <div className="subtle" style={{ fontSize: 11.5, marginTop: 4, fontFamily: "'Inter', sans-serif" }}>
                   staged by {a.stagedBy} · Xero {a.detail?.invoiceId?.slice(0, 8)}…{" "}
                   <a className="focusable" style={{ textDecoration: "underline" }} href={`https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${a.detail?.invoiceId}`} target="_blank" rel="noreferrer">View in Xero</a>
                 </div>
@@ -2079,7 +2079,7 @@ function Dock({ popups, threads, onOpen, onClose, onMin, onReply }: {
                   {t.msgs.map((m, i) => (
                     <div key={i} style={{ maxWidth: "82%", padding: "8px 11px", borderRadius: 12, fontSize: 13, lineHeight: 1.45, marginBottom: 8, ...(m.mine ? { background: "var(--pine2)", color: "#fff", marginLeft: "auto", borderBottomRightRadius: 4 } : { background: "var(--sand)", borderBottomLeftRadius: 4 }) }}>
                       {m.body}
-                      <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 10, opacity: 0.65, marginTop: 3 }}>{m.ts}</div>
+                      <div style={{ fontFamily: "'Inter',sans-serif", fontSize: 10, opacity: 0.65, marginTop: 3 }}>{m.ts}</div>
                     </div>
                   ))}
                 </div>
