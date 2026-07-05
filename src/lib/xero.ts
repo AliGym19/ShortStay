@@ -194,3 +194,58 @@ export async function getBankTransactions(): Promise<XeroBankTransaction[]> {
   );
   return data.BankTransactions;
 }
+
+export interface XeroAccount {
+  AccountID: string;
+  Code?: string;
+  Name: string;
+  Status?: string;
+  Type?: string;
+}
+
+// Chart of accounts changes rarely — cache for 5 minutes (Xero rate limit:
+// 60 calls/min/tenant; the coding flow validates an AccountCode per receipt).
+let accountsCache: { at: number; accounts: XeroAccount[] } | null = null;
+const ACCOUNTS_TTL_MS = 5 * 60_000;
+
+export async function getAccounts(): Promise<XeroAccount[]> {
+  if (accountsCache && Date.now() - accountsCache.at < ACCOUNTS_TTL_MS) {
+    return accountsCache.accounts;
+  }
+  const data = await xeroFetch<{ Accounts: XeroAccount[] }>("Accounts");
+  accountsCache = { at: Date.now(), accounts: data.Accounts };
+  return data.Accounts;
+}
+
+export interface XeroInvoiceDetail extends XeroInvoice {
+  Type?: string;
+  Reference?: string;
+  LineItems?: {
+    Description?: string;
+    UnitAmount?: number;
+    AccountCode?: string;
+  }[];
+}
+
+export async function getInvoiceById(id: string): Promise<XeroInvoiceDetail> {
+  const data = await xeroFetch<{ Invoices: XeroInvoiceDetail[] }>(
+    `Invoices/${encodeURIComponent(id)}`
+  );
+  const invoice = data.Invoices?.[0];
+  if (!invoice) throw new Error(`Xero returned no invoice for id ${id}`);
+  return invoice;
+}
+
+// ACCPAY (purchase) bills — statement cost lines. Xero's `where` needs an
+// ISO DateTime range; month is "2026-06".
+export async function getAccPayInvoices(month: string): Promise<XeroInvoiceDetail[]> {
+  const [y, m] = month.split("-").map(Number);
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+  const where =
+    `Type=="ACCPAY" AND Date >= DateTime(${y},${m},1) AND Date < DateTime(${nextY},${nextM},1)`;
+  const data = await xeroFetch<{ Invoices: XeroInvoiceDetail[] }>(
+    `Invoices?${new URLSearchParams({ where, order: "Date ASC", page: "1" })}`
+  );
+  return data.Invoices;
+}

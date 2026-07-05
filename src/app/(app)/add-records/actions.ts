@@ -1,12 +1,17 @@
 "use server";
 
+import { draftCodedBill } from "@/lib/draft-bill";
 import type { RecordType } from "@/lib/types";
-import { getContacts, xeroFetch } from "@/lib/xero";
 
 const TYPES: RecordType[] = ["invoice", "repair", "toiletries", "cleaning", "booking"];
 // These record types draft a real ACCPAY bill in Xero; the rest are
 // agency-local only (no money/accounting-side event to represent).
 const BILLABLE_TYPES: RecordType[] = ["invoice", "repair"];
+// Account by record type (UK demo chart): repairs → 473, general → 429.
+const TYPE_ACCOUNT: Partial<Record<RecordType, "473" | "429">> = {
+  repair: "473",
+  invoice: "429",
+};
 
 export interface AddedRecord {
 	id: string;
@@ -21,56 +26,6 @@ export interface AddedRecord {
 	xeroInvoiceId?: string;
 	/** Set if a Xero draft was attempted but skipped/failed — surfaced, not swallowed. */
 	xeroNote?: string;
-}
-
-/**
- * ShortStay has no landlord/supplier -> Xero Contact mapping yet (deferred
- * to a future Supabase table, see lib/types.ts's xeroContactId). Until that
- * exists, match by exact Contact name as a best-effort bridge — good enough
- * to prove the write path end-to-end, not a real identity system.
- */
-async function findContactId(name: string): Promise<string | undefined> {
-	if (!name) return undefined;
-	try {
-		const contacts = await getContacts();
-		return contacts.find((c) => c.Name.toLowerCase() === name.toLowerCase())?.ContactID;
-	} catch {
-		return undefined;
-	}
-}
-
-async function draftBill(params: {
-	contactId: string;
-	amount: number;
-	date: string;
-	reference: string;
-	description: string;
-}): Promise<string> {
-	const body = JSON.stringify({
-		Type: "ACCPAY",
-		Status: "DRAFT",
-		Contact: { ContactID: params.contactId },
-		Date: params.date,
-		LineAmountTypes: "Exclusive",
-		Reference: params.reference,
-		LineItems: [
-			{
-				Description: params.description,
-				Quantity: 1,
-				UnitAmount: params.amount,
-				AccountCode: "429", // Repairs & Maintenance (UK demo chart) — TODO: real account-code mapping
-			},
-		],
-	});
-	const data = await xeroFetch<{ Invoices: { InvoiceID: string; Status?: string }[] }>(
-		"Invoices",
-		{ method: "POST", body }
-	);
-	const invoice = data.Invoices?.[0];
-	if (!invoice || invoice.Status !== "DRAFT") {
-		throw new Error(`Xero did not return a DRAFT invoice: ${JSON.stringify(invoice)}`);
-	}
-	return invoice.InvoiceID;
 }
 
 export type AddState =
@@ -110,25 +65,32 @@ export async function addRecord(_prev: AddState, form: FormData): Promise<AddSta
 		reference,
 	};
 
-	// TODO(wire): persist the record itself to Supabase once that table exists.
+	// The shared write path (lib/draft-bill.ts) owns contact resolution,
+	// account validation, the DRAFT read-back assertion, and the audit chain.
 	if (BILLABLE_TYPES.includes(type)) {
-		const contactId = await findContactId(supplier || landlord);
-		if (!contactId) {
-			record.xeroNote =
-				`No Xero contact found matching "${supplier || landlord}" — bill not drafted. ` +
-				`Real landlord/supplier -> Xero Contact linking is deferred (see lib/types.ts).`;
-		} else {
-			try {
-				record.xeroInvoiceId = await draftBill({
-					contactId,
-					amount: record.amount,
+		try {
+			const result = await draftCodedBill({
+				coded: {
+					supplier: supplier || landlord,
 					date: record.date,
-					reference: reference || `ShortStay-${record.id}`,
-					description: `${type}: ${property}`.slice(0, 250),
-				});
-			} catch (err) {
-				record.xeroNote = `Xero draft failed: ${err instanceof Error ? err.message : String(err)}`;
+					grossInclVat: record.amount,
+					vatRate: 0.2,
+					accountCode: TYPE_ACCOUNT[type] ?? "429",
+					propertyId: "",
+					confidence: 1,
+					note: `add-records form · ${type}: ${property}`,
+				},
+				receiptId: record.id,
+				parentEventId: null,
+				actor: "user:demo",
+			});
+			if (result.ok && result.invoiceId) {
+				record.xeroInvoiceId = result.invoiceId;
+			} else {
+				record.xeroNote = result.error ?? "Xero draft skipped";
 			}
+		} catch (err) {
+			record.xeroNote = `Xero draft failed: ${err instanceof Error ? err.message : String(err)}`;
 		}
 	}
 
