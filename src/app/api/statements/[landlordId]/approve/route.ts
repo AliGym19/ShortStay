@@ -3,11 +3,14 @@ import { desc, eq } from "drizzle-orm";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import {
+  approverAuthority,
   combine,
   noMoneyMovement,
   statementCompleteness,
   type GuardResult,
 } from "@/lib/guardrails";
+import { can, normaliseRole } from "@/lib/permissions";
+import { getSession } from "@/lib/session";
 import { statements } from "@/lib/schema";
 import type { StatementLine, StatementTotals } from "@/lib/statement";
 import { landlordMatches, STATEMENT_MONTH } from "@/lib/statement-io";
@@ -61,8 +64,11 @@ export async function POST(
   });
   const assembledEventId = assembledEvents.at(-1)?.id ?? null;
 
+  const user = await getSession();
+  const role = user ? normaliseRole(user.role) : "cleaner";
   const results: GuardResult[] = [
     noMoneyMovement(actionKind),
+    approverAuthority(can(role, "approve-statements"), user?.role ?? "anonymous"),
     statementCompleteness(
       lines.map((l) => ({
         sourceType: l.sourceType,
@@ -110,15 +116,16 @@ export async function POST(
     payload: { decision, results, landlordId, month: STATEMENT_MONTH },
   });
 
+  const actor = user ? `user:${user.name} (${user.role})` : "user:demo";
   const approvedAt = new Date();
   await db
     .update(statements)
-    .set({ status: "approved", approvedBy: "user:demo", approvedAt })
+    .set({ status: "approved", approvedBy: actor, approvedAt })
     .where(eq(statements.id, snapshot.id));
 
   const approvedEvent = await audit.append({
     eventType: "statement.approved",
-    actor: "user:demo",
+    actor,
     subjectType: "statement",
     subjectId: snapshot.id,
     parentEventId: guardEvent.id,

@@ -30,6 +30,8 @@ export const KNOWN_EVENT_TYPES = [
   "statement.held",
   "statement.approved",
   "guard.evaluated",
+  "report.submitted",
+  "approval.decided",
   "prompt.created",
   "prompt.updated",
   "prompt.retired",

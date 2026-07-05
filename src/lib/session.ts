@@ -55,14 +55,36 @@ export async function clearSession(): Promise<void> {
 	(await cookies()).delete(COOKIE);
 }
 
-/** Stand-in user for local dev, until the Xero callback provides the real one. */
-export function demoUser(): SessionUser {
-	return {
-		id: "usr_demo",
+/** Demo personas — one per pipeline stage. Role strings feed lib/permissions. */
+const DEMO_USERS: Record<string, Omit<SessionUser, "xero">> = {
+	cleaner: {
+		id: "usr_demo_cleaner",
+		name: "Dana Kovač",
+		email: "dana@meridianlets.co.uk",
+		agency: "Meridian Short Lets",
+		role: "cleaner",
+	},
+	operations: {
+		id: "usr_demo_ops",
+		name: "Jo Okonkwo",
+		email: "jo@meridianlets.co.uk",
+		agency: "Meridian Short Lets",
+		role: "operations",
+	},
+	accountant: {
+		id: "usr_demo_accountant",
 		name: "Priya Nandra",
 		email: "priya@meridianlets.co.uk",
 		agency: "Meridian Short Lets",
-		role: "Operations",
+		role: "accountant",
+	},
+};
+
+/** Stand-in user for local dev, until the Xero callback provides the real one. */
+export function demoUser(persona: string = "operations"): SessionUser {
+	const base = DEMO_USERS[persona] ?? DEMO_USERS.operations;
+	return {
+		...base,
 		xero: {
 			connected: true,
 			tenantId: "demo-tenant",

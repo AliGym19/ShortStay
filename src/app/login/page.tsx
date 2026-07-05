@@ -89,12 +89,22 @@ export default function LoginPage() {
 						<span>or</span>
 					</div>
 
-					<form action={demoLogin}>
-						<button className={styles.demo} type="submit">
-							Continue in demo mode
-						</button>
-					</form>
-					<p className={styles.devnote}>Demo mode loads sample agency data — no Xero connection needed.</p>
+					<div style={{ display: "grid", gap: 8 }}>
+						{([
+							["accountant", "Priya Nandra", "Accountant — approvals, statements, ledger"],
+							["operations", "Jo Okonkwo", "Operations manager — reports, bookings, capture"],
+							["cleaner", "Dana Kovač", "Cleaner — submit field reports"],
+						] as const).map(([persona, name, blurb]) => (
+							<form action={demoLogin} key={persona}>
+								<input type="hidden" name="persona" value={persona} />
+								<button className={styles.demo} type="submit" style={{ width: "100%", textAlign: "left", display: "flex", flexDirection: "column", gap: 2 }}>
+									<span>{name}</span>
+									<span style={{ fontSize: 11.5, opacity: 0.75, fontWeight: 400 }}>{blurb}</span>
+								</button>
+							</form>
+						))}
+					</div>
+					<p className={styles.devnote}>Demo personas share one workspace — each sees their own view of it.</p>
 				</div>
 
 				<p className={styles.legal}>

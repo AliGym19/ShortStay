@@ -32,6 +32,19 @@ export function noMoneyMovement(actionKind: string): GuardResult {
   };
 }
 
+// Guard 3 — approver-authority. Statement release authorisation is the
+// accountant's alone; any other signed-in role escalates. Role semantics
+// live in lib/permissions — this guard just names the decision.
+export function approverAuthority(roleAllowed: boolean, roleName: string): GuardResult {
+  return {
+    name: "approver-authority",
+    decision: roleAllowed ? "allow" : "escalate",
+    reason: roleAllowed
+      ? `role ${roleName} holds statement-approval authority`
+      : `role ${roleName} cannot authorise release — accountant approval required`,
+  };
+}
+
 export interface StatementLineForGuard {
   readonly sourceType: string;
   readonly sourceId: string;

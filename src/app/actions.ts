@@ -8,8 +8,11 @@ import { tokenStore } from "@/lib/tokenStore";
 // for UI iteration without hitting the live API every time. Loads a fake
 // SessionUser; no real Xero token is stored, so any Xero-data section on the
 // dashboard should treat "demo" tenantId as not-really-connected.
-export async function demoLogin(): Promise<void> {
-	await setSession(demoUser());
+// The persona comes from the login picker's hidden field (cleaner /
+// operations / accountant) and drives lib/permissions.
+export async function demoLogin(form: FormData): Promise<void> {
+	const persona = String(form.get("persona") ?? "operations");
+	await setSession(demoUser(persona));
 	redirect("/dashboard");
 }
 

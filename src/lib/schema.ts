@@ -71,6 +71,23 @@ export const bookings = sqliteTable("bookings", {
   checkIn: text("check_in").notNull(), // "2026-06-02"
 });
 
+// Field reports submitted by cleaners/staff — the intake end of the
+// report → invoice → approval pipeline. approvalId links to the approvals
+// row once the ops manager has staged a bill from the report.
+export const reports = sqliteTable("reports", {
+  id: text("id").primaryKey().$defaultFn(uuid),
+  propertyId: text("property_id").notNull(),
+  description: text("description").notNull(),
+  urgency: text("urgency").notNull().default("normal"), // "low" | "normal" | "urgent"
+  category: text("category"),
+  submittedBy: text("submitted_by").notNull(),
+  status: text("status").notNull().default("open"), // "open" | "invoiced" | "approved" | "denied"
+  approvalId: text("approval_id"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export const approvals = sqliteTable("approvals", {
   id: text("id").primaryKey().$defaultFn(uuid),
   kind: text("kind").notNull(),

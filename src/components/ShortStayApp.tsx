@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { logout } from "@/app/actions";
+import type { Role } from "@/lib/permissions";
 
 /* ============================================================================
    ShortStay — Xero back office for Booking.com short-let agencies
@@ -267,7 +268,23 @@ interface CodedFields {
   code: string; accName: string; propId: string; propName: string;
   confidence: number; note?: string;
 }
-type TabKey = "overview" | "capture" | "statements" | "reconcile" | "agents" | "ledger";
+type TabKey =
+  | "overview"
+  | "capture"
+  | "statements"
+  | "reconcile"
+  | "agents"
+  | "ledger"
+  | "report"
+  | "fieldreports"
+  | "approvals";
+
+// Which tabs each persona sees — mirrors lib/permissions capabilities.
+const ROLE_TABS: Record<Role, readonly TabKey[]> = {
+  cleaner: ["report"],
+  operations: ["overview", "capture", "fieldreports", "agents"],
+  accountant: ["overview", "statements", "approvals", "reconcile", "agents", "ledger"],
+};
 
 /* ------------------------------------------------------- API contracts ---- */
 interface ApiStatementLine {
@@ -1460,9 +1477,403 @@ function Agents() {
   );
 }
 
+/* ---- pipeline: report → invoice → approval ---- */
+interface ApiReport {
+  id: string;
+  propertyId: string;
+  description: string;
+  urgency: "low" | "normal" | "urgent";
+  submittedBy: string;
+  status: "open" | "invoiced" | "approved" | "denied";
+  approvalId: string | null;
+  createdAt: number;
+}
+interface ApiApproval {
+  id: string;
+  kind: string;
+  subjectId: string;
+  summary: string;
+  detail: {
+    invoiceId?: string;
+    reportDescription?: string;
+    propertyId?: string;
+    supplier?: string;
+    grossInclVat?: number;
+    accountCode?: string;
+  } | null;
+  stagedBy: string;
+  status: string;
+  decidedBy: string | null;
+  createdAt: number;
+}
+
+const URGENCY_TAG: Record<string, string> = { urgent: "hold", normal: "read", low: "src" };
+const REPORT_STATUS_TAG: Record<string, string> = {
+  open: "hold",
+  invoiced: "draft",
+  approved: "approved",
+  denied: "src",
+};
+
+function ReportForm({ userName, onLedgerChange }: { userName: string; onLedgerChange: () => void }) {
+  const [propertyId, setPropertyId] = useState("P1");
+  const [description, setDescription] = useState("");
+  const [urgency, setUrgency] = useState<"low" | "normal" | "urgent">("normal");
+  const [submitting, setSubmitting] = useState(false);
+  const [mine, setMine] = useState<ApiReport[]>([]);
+
+  const loadMine = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/reports");
+      const data = (await res.json()) as { reports: ApiReport[] };
+      setMine(data.reports.filter((r) => r.submittedBy === userName));
+    } catch {
+      setMine([]);
+    }
+  }, [userName]);
+  React.useEffect(() => { void loadMine(); }, [loadMine]);
+
+  const submit = async () => {
+    if (!description.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId, description, urgency }),
+      });
+      setDescription("");
+      setUrgency("normal");
+      await loadMine();
+      onLedgerChange();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="head">
+        <h1 className="h-title">Report an issue</h1>
+        <p className="h-sub">Spotted something at a property? Send it in — the office takes it from there.</p>
+      </div>
+
+      <div className="card pad" style={{ maxWidth: 560 }}>
+        <div className="sect-t" style={{ marginBottom: 10 }}>Which property?</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+          {PROPERTIES.map((p) => (
+            <button
+              key={p.id}
+              className={"chip focusable" + (propertyId === p.id ? " on" : "")}
+              onClick={() => setPropertyId(p.id)}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px 6px 6px" }}
+            >
+              <span style={{ width: 40, height: 28, borderRadius: 6, overflow: "hidden", display: "inline-block" }}>
+                <PropThumb pid={p.id} />
+              </span>
+              {p.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="sect-t" style={{ marginBottom: 8 }}>What&apos;s the issue?</div>
+        <div className="receipt" style={{ marginBottom: 12 }}>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Toilet paper needs restocking — cupboard is empty"
+            style={{ minHeight: 110 }}
+            aria-label="Issue description"
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+          <span className="subtle">Urgency:</span>
+          {(["low", "normal", "urgent"] as const).map((u) => (
+            <button key={u} className={"chip focusable" + (urgency === u ? " on" : "")} onClick={() => setUrgency(u)}>{u}</button>
+          ))}
+        </div>
+
+        <button className="btn focusable" style={{ width: "100%", justifyContent: "center" }} onClick={submit} disabled={!description.trim() || submitting}>
+          {submitting ? <><span className="spinner" /> Sending…</> : "Send report"}
+        </button>
+      </div>
+
+      <div className="card pad" style={{ maxWidth: 560, marginTop: 16 }}>
+        <div className="sect-t" style={{ marginBottom: 8 }}>My reports</div>
+        {mine.length === 0 && <p className="subtle" style={{ padding: "8px 0" }}>Nothing yet.</p>}
+        {mine.map((r) => (
+          <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderBottom: "1px solid #EDF1F8" }}>
+            <span style={{ width: 40, height: 28, borderRadius: 6, overflow: "hidden", flex: "0 0 40px" }}><PropThumb pid={r.propertyId} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.description}</div>
+              <div className="subtle" style={{ fontSize: 11.5 }}>{propById(r.propertyId).name} · {fmtTs(new Date(r.createdAt).toISOString())}</div>
+            </div>
+            <span className={`tag ${REPORT_STATUS_TAG[r.status]}`}>{r.status}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolean; onLedgerChange: () => void }) {
+  const [reports, setReports] = useState<ApiReport[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [supplier, setSupplier] = useState("");
+  const [amount, setAmount] = useState("");
+  const [accountCode, setAccountCode] = useState<"408" | "473" | "445" | "429">("429");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string; invoiceId?: string } | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/reports");
+      setReports(((await res.json()) as { reports: ApiReport[] }).reports);
+    } catch { setReports([]); }
+  }, []);
+  React.useEffect(() => { void load(); }, [load]);
+
+  const urgencyRank = { urgent: 0, normal: 1, low: 2 } as const;
+  const open = [...reports.filter((r) => r.status === "open")].sort(
+    (a, b) => urgencyRank[a.urgency] - urgencyRank[b.urgency]
+  );
+  const rest = reports.filter((r) => r.status !== "open");
+
+  const stage = async (report: ApiReport) => {
+    if (busy) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/reports/${report.id}/invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coded: {
+            supplier: supplier.trim(),
+            date: new Date().toISOString().slice(0, 10),
+            grossInclVat: Number(amount),
+            vatRate: 0.2,
+            accountCode,
+            propertyId: report.propertyId,
+            confidence: 1,
+            note: `field report: ${report.description.slice(0, 120)}`,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setResult({ ok: true, text: "Sent to Xero as pending — now in the accountant's approvals queue.", invoiceId: data.invoiceId });
+        setOpenId(null);
+        setSupplier("");
+        setAmount("");
+        await load();
+        onLedgerChange();
+      } else {
+        setResult({ ok: false, text: data.error ?? "staging failed" });
+      }
+    } catch (err) {
+      setResult({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="head">
+        <h1 className="h-title">Field reports</h1>
+        <p className="h-sub">Reports from the field team. Review, price the fix, and send the bill to Xero — the accountant signs it off.</p>
+      </div>
+
+      {result && (
+        <div className="callout" style={{ marginBottom: 14, ...(result.ok ? {} : { background: "var(--clay-soft)", borderColor: "var(--clay)" }) }}>
+          {result.text}
+          {result.ok && result.invoiceId && (
+            <>{" "}<a className="focusable" style={{ fontWeight: 600, textDecoration: "underline" }} href={`https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${result.invoiceId}`} target="_blank" rel="noreferrer">View in Xero →</a></>
+          )}
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="pad" style={{ paddingBottom: 8 }}>
+          <div className="sect-t">Open · {open.length}</div>
+        </div>
+        {open.length === 0 && <p className="subtle" style={{ padding: "0 22px 18px" }}>Queue is clear.</p>}
+        {open.map((r) => (
+          <div key={r.id} style={{ borderTop: "1px solid #EDF1F8" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 22px" }}>
+              <span style={{ width: 52, height: 36, borderRadius: 7, overflow: "hidden", flex: "0 0 52px" }}><PropThumb pid={r.propertyId} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.description}</div>
+                <div className="subtle" style={{ fontSize: 11.5 }}>{propById(r.propertyId).name} · {r.submittedBy} · {fmtTs(new Date(r.createdAt).toISOString())}</div>
+              </div>
+              <span className={`tag ${URGENCY_TAG[r.urgency]}`}>{r.urgency}</span>
+              <button className="btn sm focusable" onClick={() => { setOpenId(openId === r.id ? null : r.id); setResult(null); }}>
+                {openId === r.id ? "Close" : "Create invoice"}
+              </button>
+            </div>
+            {openId === r.id && (
+              <div style={{ padding: "0 22px 16px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  value={supplier}
+                  onChange={(e) => setSupplier(e.target.value)}
+                  placeholder="Supplier (must exist in Xero)"
+                  className="focusable"
+                  style={{ flex: "1 1 220px", border: "1px solid var(--line)", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "inherit" }}
+                />
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="£ inc. VAT"
+                  inputMode="decimal"
+                  className="focusable"
+                  style={{ width: 110, border: "1px solid var(--line)", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "inherit" }}
+                />
+                <select
+                  value={accountCode}
+                  onChange={(e) => setAccountCode(e.target.value as typeof accountCode)}
+                  className="focusable"
+                  style={{ border: "1px solid var(--line)", borderRadius: 9, padding: "9px 10px", fontSize: 13, fontFamily: "inherit", background: "var(--surface)" }}
+                >
+                  <option value="408">408 · Cleaning</option>
+                  <option value="473">473 · Repairs</option>
+                  <option value="445">445 · Light/Power/Heat</option>
+                  <option value="429">429 · General</option>
+                </select>
+                <button
+                  className="btn sm focusable"
+                  onClick={() => void stage(r)}
+                  disabled={busy || !supplier.trim() || !(Number(amount) > 0) || !xeroConnected}
+                  title={!xeroConnected ? "Connect Xero first" : undefined}
+                >
+                  {busy ? "Sending…" : "Send to Xero as pending →"}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {rest.length > 0 && (
+        <div className="card">
+          <div className="pad" style={{ paddingBottom: 8 }}><div className="sect-t">Handled</div></div>
+          {rest.map((r) => (
+            <div key={r.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 22px", borderTop: "1px solid #EDF1F8" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.description}</div>
+                <div className="subtle" style={{ fontSize: 11.5 }}>{propById(r.propertyId).name} · {r.submittedBy}</div>
+              </div>
+              <span className={`tag ${REPORT_STATUS_TAG[r.status]}`}>{r.status === "invoiced" ? "awaiting accountant" : r.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ApprovalsTab({ onLedgerChange }: { onLedgerChange: () => void }) {
+  const [items, setItems] = useState<ApiApproval[]>([]);
+  const [denyingId, setDenyingId] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/approvals");
+      setItems(((await res.json()) as { approvals: ApiApproval[] }).approvals);
+    } catch { setItems([]); }
+  }, []);
+  React.useEffect(() => { void load(); }, [load]);
+
+  const decide = async (id: string, decision: "approved" | "denied") => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fetch(`/api/approvals/${id}/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, ...(decision === "denied" ? { reason } : {}) }),
+      });
+      setDenyingId(null);
+      setReason("");
+      await load();
+      onLedgerChange();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pending = items.filter((a) => a.status === "pending");
+  const decided = items.filter((a) => a.status !== "pending");
+
+  return (
+    <>
+      <div className="head">
+        <h1 className="h-title">Approvals</h1>
+        <p className="h-sub">Bills staged by the operations team, pending in Xero. Approve to authorise payment from Xero, or deny with a reason — ShortStay itself never pays and never voids.</p>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="pad" style={{ paddingBottom: 8 }}><div className="sect-t">Pending · {pending.length}</div></div>
+        {pending.length === 0 && <p className="subtle" style={{ padding: "0 22px 18px" }}>Nothing waiting on you.</p>}
+        {pending.map((a) => (
+          <div key={a.id} style={{ borderTop: "1px solid #EDF1F8", padding: "14px 22px" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+              {a.detail?.propertyId && (
+                <span style={{ width: 52, height: 36, borderRadius: 7, overflow: "hidden", flex: "0 0 52px" }}><PropThumb pid={a.detail.propertyId} /></span>
+              )}
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.detail?.supplier} · {typeof a.detail?.grossInclVat === "number" ? money(a.detail.grossInclVat) : ""} · account {a.detail?.accountCode}</div>
+                <div className="subtle" style={{ fontSize: 12.5, marginTop: 3 }}>&ldquo;{a.detail?.reportDescription}&rdquo;</div>
+                <div className="subtle" style={{ fontSize: 11.5, marginTop: 4, fontFamily: "'Space Mono', monospace" }}>
+                  staged by {a.stagedBy} · Xero {a.detail?.invoiceId?.slice(0, 8)}…{" "}
+                  <a className="focusable" style={{ textDecoration: "underline" }} href={`https://go.xero.com/AccountsPayable/Edit.aspx?InvoiceID=${a.detail?.invoiceId}`} target="_blank" rel="noreferrer">View in Xero</a>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button className="btn sm focusable" onClick={() => void decide(a.id, "approved")} disabled={busy}>Approve</button>
+                <button className="btn sm ghost focusable" onClick={() => setDenyingId(denyingId === a.id ? null : a.id)} disabled={busy}>Deny</button>
+              </div>
+            </div>
+            {denyingId === a.id && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Reason (required to deny)"
+                  className="focusable"
+                  style={{ flex: 1, border: "1px solid var(--line)", borderRadius: 9, padding: "9px 12px", fontSize: 13, fontFamily: "inherit" }}
+                />
+                <button className="btn sm focusable" style={{ background: "var(--clay)", borderColor: "var(--clay)" }} onClick={() => void decide(a.id, "denied")} disabled={busy || !reason.trim()}>Confirm deny</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {decided.length > 0 && (
+        <div className="card">
+          <div className="pad" style={{ paddingBottom: 8 }}><div className="sect-t">Decided</div></div>
+          {decided.map((a) => (
+            <div key={a.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 22px", borderTop: "1px solid #EDF1F8" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.summary}</div>
+                <div className="subtle" style={{ fontSize: 11.5 }}>decided by {a.decidedBy}</div>
+              </div>
+              <span className={`tag ${a.status === "approved" ? "approved" : "src"}`}>{a.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ================================================================= app ==== */
-export default function ShortStayApp() {
-  const [tab, setTab] = useState<TabKey>("overview");
+export default function ShortStayApp({ userName, role }: { userName: string; role: Role }) {
+  const [tab, setTab] = useState<TabKey>(role === "cleaner" ? "report" : "overview");
   const [statements, setStatements] = useState<Record<string, ApiStatement | undefined>>({});
   const [auditEvents, setAuditEvents] = useState<ApiAuditEvent[]>([]);
   const [xero, setXero] = useState<ApiXeroStatus | null>(null);
@@ -1494,14 +1905,18 @@ export default function ShortStayApp() {
 
   const hasDraftedBill = auditEvents.some((e) => e.eventType === "bill.drafted");
 
-  const nav: [TabKey, string, React.ReactElement, number?][] = [
+  const NAV_ALL: [TabKey, string, React.ReactElement, number?][] = [
     ["overview", "Overview", I.overview],
+    ["report", "Report an issue", I.capture],
+    ["fieldreports", "Field reports", I.reconcile],
     ["capture", "Capture", I.capture, 1],
     ["statements", "Statements", I.statements],
+    ["approvals", "Approvals", I.statements],
     ["reconcile", "Reconcile", I.reconcile],
     ["agents", "Agents", I.agents],
     ["ledger", "Ledger & trust", I.ledger],
   ];
+  const nav = NAV_ALL.filter(([k]) => ROLE_TABS[role].includes(k));
 
   return (
     <div className="ss-root">
@@ -1554,8 +1969,11 @@ export default function ShortStayApp() {
 
       <main className="main">
         {tab === "overview" && <Overview statements={statements} xero={xero} go={setTab} />}
+        {tab === "report" && <ReportForm userName={userName} onLedgerChange={() => void refresh()} />}
+        {tab === "fieldreports" && <FieldReports xeroConnected={!!xero?.connected} onLedgerChange={() => void refresh()} />}
         {tab === "capture" && <Capture audit={auditEvents} xeroConnected={!!xero?.connected} onLedgerChange={() => void refresh()} />}
         {tab === "statements" && <Statements statements={statements} onRefresh={() => void refresh()} />}
+        {tab === "approvals" && <ApprovalsTab onLedgerChange={() => void refresh()} />}
         {tab === "reconcile" && <Reconcile onLedgerChange={() => void refresh()} />}
         {tab === "agents" && <Agents />}
         {tab === "ledger" && <Ledger audit={auditEvents} xero={xero} />}
