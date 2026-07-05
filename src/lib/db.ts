@@ -12,11 +12,22 @@ const g = globalThis as unknown as {
 };
 
 function createDb(): BetterSQLite3Database<typeof schema> {
-  const dir = path.join(process.cwd(), "data");
-  mkdirSync(dir, { recursive: true });
-  const sqlite = new Database(path.join(dir, "shortstay.db"));
-  sqlite.pragma("journal_mode = WAL");
-  return drizzle(sqlite, { schema });
+  // Import must never throw: Next's build collects page data in parallel
+  // workers (first-creation races on a brand-new db file), and serverless
+  // filesystems are read-only. Fall back to an ephemeral in-memory database
+  // in those environments — hosted showcase renders, local dev persists.
+  try {
+    const dir = path.join(process.cwd(), "data");
+    mkdirSync(dir, { recursive: true });
+    const sqlite = new Database(path.join(dir, "shortstay.db"));
+    sqlite.pragma("journal_mode = WAL");
+    return drizzle(sqlite, { schema });
+  } catch (err) {
+    console.warn(
+      `shortstay db: file-backed SQLite unavailable (${err instanceof Error ? err.message : err}) — using in-memory fallback`
+    );
+    return drizzle(new Database(":memory:"), { schema });
+  }
 }
 
 export const db = (g.__shortstayDb ??= createDb());
