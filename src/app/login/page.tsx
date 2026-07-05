@@ -98,8 +98,12 @@ export default function LoginPage() {
 				</div>
 
 				<p className={styles.legal}>
-					By continuing you agree to connect a Xero organisation. ShortStay requests read scopes plus a single
-					draft-invoice scope. No payment scope is ever requested.
+					By continuing you agree to the{" "}
+					<a href="/legal?doc=terms-of-service" style={{ textDecoration: "underline" }}>Terms of Service</a>. ShortStay
+					requests read scopes plus a single draft-invoice scope. No payment scope is ever requested.{" "}
+					<a href="/legal?doc=privacy-policy" style={{ textDecoration: "underline" }}>Privacy</a> ·{" "}
+					<a href="/legal?doc=cookie-policy" style={{ textDecoration: "underline" }}>Cookies</a> ·{" "}
+					<a href="/legal" style={{ textDecoration: "underline" }}>All legal documents</a>
 				</p>
 			</section>
 		</main>

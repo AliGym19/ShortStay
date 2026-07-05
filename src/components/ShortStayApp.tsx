@@ -932,6 +932,10 @@ function Capture({ audit, xeroConnected, onLedgerChange }: {
             This is a prototype operating against a Xero demo organisation for evaluation. It does not provide financial, tax, or accounting advice. Drafted bills require human review in Xero before any payment is made. Extracted figures are AI-generated and shown with a confidence score — verify before approving. No liability is accepted for decisions made on unverified drafts.
           </div>
         </details>
+        <p className="subtle" style={{ margin: "10px 2px 0", fontSize: 12.5 }}>
+          Full regulatory documents — Terms of Service, Privacy Policy, Cookie Policy, Acceptable Use, and the UK GDPR Art. 28 Data Processing Addendum — are at{" "}
+          <a href="/legal" target="_blank" rel="noreferrer" style={{ fontWeight: 600, textDecoration: "underline" }}>ShortStay Legal ↗</a>.
+        </p>
       </div>
     </>
   );
@@ -1337,6 +1341,25 @@ function Ledger({ audit, xero }: { audit: ApiAuditEvent[]; xero: ApiXeroStatus |
         <div className="divider" />
         <div className="pad" style={{ padding: "12px 22px" }}>
           <span className="subtle" style={{ fontSize: 12.5 }}>Vocabulary: <span className="mono">booking.recorded · bill.drafted · statement.assembled · guard.evaluated · statement.approved</span>. There is no <span className="mono" style={{ color: "var(--clay)", textDecoration: "line-through" }}>payment.sent</span> or <span className="mono" style={{ color: "var(--clay)", textDecoration: "line-through" }}>transfer.made</span>.</span>
+        </div>
+      </div>
+
+      <div className="card pad" style={{ marginTop: 16 }}>
+        <div className="sect-t" style={{ marginBottom: 6 }}>Legal &amp; compliance documents</div>
+        <p className="subtle" style={{ margin: "0 0 12px", fontSize: 12.5 }}>
+          UK GDPR, PECR (as amended by the Data (Use and Access) Act 2025), Xero Developer Platform Terms,
+          and short-term-let regulation are covered by the full document set — publicly available, no sign-in required.
+        </p>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {([
+            ["terms-of-service", "Terms of Service"],
+            ["privacy-policy", "Privacy Policy"],
+            ["cookie-policy", "Cookie Policy"],
+            ["acceptable-use-policy", "Acceptable Use"],
+            ["data-processing-addendum", "Data Processing Addendum"],
+          ] as const).map(([slug, label]) => (
+            <a key={slug} className="chip focusable" style={{ textDecoration: "none" }} href={`/legal?doc=${slug}`} target="_blank" rel="noreferrer">{label} ↗</a>
+          ))}
         </div>
       </div>
     </>
