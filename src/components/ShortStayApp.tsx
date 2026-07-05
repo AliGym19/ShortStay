@@ -1661,6 +1661,11 @@ function BookingQueue() {
   );
 }
 
+// Tolerant money parse: "£12.50", "12,50", " 12.5 " all work.
+function parseAmount(raw: string): number {
+  return Number(raw.replace(/[£$€\s,]/g, "").replace(/,/, "."));
+}
+
 function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolean; onLedgerChange: () => void }) {
   const [reports, setReports] = useState<ApiReport[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -1696,7 +1701,7 @@ function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolea
           coded: {
             supplier: supplier.trim(),
             date: new Date().toISOString().slice(0, 10),
-            grossInclVat: Number(amount),
+            grossInclVat: parseAmount(amount),
             vatRate: 0.2,
             accountCode,
             propertyId: report.propertyId,
@@ -1790,11 +1795,19 @@ function FieldReports({ xeroConnected, onLedgerChange }: { xeroConnected: boolea
                 <button
                   className="btn sm focusable"
                   onClick={() => void stage(r)}
-                  disabled={busy || !supplier.trim() || !(Number(amount) > 0) || !xeroConnected}
-                  title={!xeroConnected ? "Connect Xero first" : undefined}
+                  disabled={busy || !supplier.trim() || !(parseAmount(amount) > 0) || !xeroConnected}
                 >
                   {busy ? "Sending…" : "Send to Xero as pending →"}
                 </button>
+                {(!xeroConnected || !supplier.trim() || !(parseAmount(amount) > 0)) && (
+                  <span className="subtle" style={{ fontSize: 12, flexBasis: "100%" }}>
+                    {!xeroConnected
+                      ? "Xero is not connected — sign in from the sidebar first."
+                      : !supplier.trim()
+                        ? "Enter the supplier (must exist as a Xero contact — e.g. Sparkle Turnarounds)."
+                        : "Enter the amount inc. VAT to enable sending."}
+                  </span>
+                )}
               </div>
             )}
           </div>
